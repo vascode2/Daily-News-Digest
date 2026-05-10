@@ -30,8 +30,8 @@ Global filtering through [config/keywords.txt](config/keywords.txt) is still ava
 
 The daily workflow is [.github/workflows/daily-digest.yml](.github/workflows/daily-digest.yml).
 
-- Schedule: `0 11 * * *`
-- Time: 7 AM EDT / EST target in `America/New_York`
+- Schedule: `0 11,12 * * *` with an in-workflow timezone gate
+- Time: exactly 7 AM in `America/New_York` year-round; GitHub cron wakes at both UTC offsets and skips the non-7 AM run
 - Notion parent page: `35cafdd37e7e80ebba93c73610e65f33`
 
 Manual workflows are also available:

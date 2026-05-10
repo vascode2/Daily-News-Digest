@@ -2,8 +2,9 @@ name: '[AUTO] Daily News Digest'
 
 on:
   schedule:
-    # 11:00 UTC = 07:00 EDT (summer) / 06:00 EST (winter). Runs daily.
-    - cron: '0 11 * * *'
+    # GitHub cron is UTC only. Wake at both possible 7 AM America/New_York UTC
+    # offsets, then gate below so only the true local 7 AM run proceeds.
+    - cron: '0 11,12 * * *'
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
@@ -14,34 +15,59 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Check 7 AM local time
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Manual run: proceeding."
+            exit 0
+          fi
+
+          local_hour=$(TZ=America/New_York date +%H)
+          if [ "$local_hour" = "07" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Scheduled run is 7 AM America/New_York: proceeding."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Scheduled run is ${local_hour}:00 America/New_York: skipping."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.should_run == 'true'
 
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.should_run == 'true'
         with:
           node-version: '22'
 
       - name: Install yt-dlp (latest GitHub release)
+        if: steps.gate.outputs.should_run == 'true'
         run: |
           sudo curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
           yt-dlp --version
 
       - name: Install Claude Code CLI
+        if: steps.gate.outputs.should_run == 'true'
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Verify tools
+        if: steps.gate.outputs.should_run == 'true'
         run: |
           node --version
           yt-dlp --version
           claude --version
 
       - name: Collect yesterday's videos
+        if: steps.gate.outputs.should_run == 'true'
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
           DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
         run: npm run collect
 
       - name: Summarize via Claude Code
+        if: steps.gate.outputs.should_run == 'true'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
@@ -66,11 +92,13 @@ jobs:
             STOP immediately after writing tmp/summaries-<KEY>.md. Do not run any other commands. Do not modify output/ or any other location."
 
       - name: Review summaries
+        if: steps.gate.outputs.should_run == 'true'
         id: review
         continue-on-error: true
         run: npm run review
 
       - name: Publish to Notion + repo
+        if: steps.gate.outputs.should_run == 'true'
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_PAGE_ID: 35cafdd37e7e80ebba93c73610e65f33
@@ -79,6 +107,7 @@ jobs:
         run: npm run publish
 
       - name: Commit output back to repo
+        if: steps.gate.outputs.should_run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
