@@ -187,6 +187,7 @@ if (ytdlpCheck.error || ytdlpCheck.status !== 0) {
 
 const startStrYtdlp = startStr.replace(/-/g, '');
 const endStrYtdlp = endStr.replace(/-/g, '');
+const youtubeClientArgs = ['--extractor-args', 'youtube:player_client=default,web,android,ios,tv'];
 
 const PLAYLIST_END = mode === 'channel' ? limit : Math.max(10, days * 5);
 
@@ -216,7 +217,7 @@ function fetchChannel(channelEntry) {
     '--dump-json',
     '--skip-download',
     '--ignore-no-formats-error',
-    '--extractor-args', 'youtube:player_client=default,web,android,ios',
+    ...youtubeClientArgs,
     '--playlist-end', String(PLAYLIST_END),
     '--ignore-errors',
     '--no-warnings',
@@ -273,23 +274,28 @@ function fetchChannel(channelEntry) {
     spawnSync('yt-dlp', [
       ...cookieArgs,
       '--write-auto-sub',
-      '--sub-lang', 'en,ko',
-      '--sub-format', 'vtt',
+      '--sub-lang', 'ko-orig,ko,en',
+      '--sub-format', 'json3/vtt',
       '--skip-download',
       '--ignore-no-formats-error',
-      '--extractor-args', 'youtube:player_client=default,web,android,ios',
+      ...youtubeClientArgs,
       '--no-warnings',
       '-o', path.join(tmpDir, `%(id)s.%(ext)s`),
       videoUrl
     ], { encoding: 'utf8', timeout: 60000 });
 
-    const vttFiles = fs.readdirSync(tmpDir).filter(f => f.startsWith(videoId) && f.endsWith('.vtt'));
-    if (vttFiles.length > 0) {
-      const vttContent = fs.readFileSync(path.join(tmpDir, vttFiles[0]), 'utf8');
-      transcriptSegments = parseVTTSegments(vttContent);
+    const subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
+      f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
+    ));
+    if (subtitleFiles.length > 0) {
+      const subtitleFile = subtitleFiles[0];
+      const subtitleContent = fs.readFileSync(path.join(tmpDir, subtitleFile), 'utf8');
+      transcriptSegments = subtitleFile.endsWith('.json3')
+        ? parseJSON3Segments(subtitleContent)
+        : parseVTTSegments(subtitleContent);
       transcript = transcriptSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
       hasTranscript = transcriptSegments.length >= 3 && transcript.length > 100;
-      vttFiles.forEach(f => { try { fs.unlinkSync(path.join(tmpDir, f)); } catch {} });
+      subtitleFiles.forEach(f => { try { fs.unlinkSync(path.join(tmpDir, f)); } catch {} });
     }
 
     if (requiredKeywords.length > 0 && !matchesKeywords(video, transcript, requiredKeywords)) {
@@ -351,6 +357,21 @@ function matchesKeywords(video, transcript, requiredKeywords) {
     .toLocaleLowerCase();
 
   return requiredKeywords.some(keyword => haystack.includes(keyword.toLocaleLowerCase()));
+}
+
+function sortSubtitleFiles(files) {
+  const languageRank = (file) => {
+    if (file.includes('.ko-orig.')) return 0;
+    if (file.includes('.ko.')) return 1;
+    if (file.includes('.en.')) return 2;
+    return 9;
+  };
+
+  const formatRank = (file) => file.endsWith('.json3') ? 0 : 1;
+
+  return [...files].sort((a, b) =>
+    languageRank(a) - languageRank(b) || formatRank(a) - formatRank(b) || a.localeCompare(b)
+  );
 }
 
 // Tiny concurrency limiter — runs `tasks` with at most `n` in flight.
@@ -439,4 +460,47 @@ function parseVTTSegments(vtt) {
   }
 
   return segments;
+}
+
+function parseJSON3Segments(jsonText) {
+  const segments = [];
+  const seen = new Set();
+  let data;
+
+  try {
+    data = JSON.parse(jsonText);
+  } catch {
+    return segments;
+  }
+
+  for (const event of data.events || []) {
+    if (!Array.isArray(event.segs) || !Number.isFinite(event.tStartMs)) continue;
+
+    const text = event.segs
+      .map(seg => seg.utf8 || '')
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!text || text === '\n') continue;
+
+    const startSec = Math.max(0, Math.floor(event.tStartMs / 1000));
+    const endSec = Math.max(startSec, Math.floor((event.tStartMs + (event.dDurationMs || 0)) / 1000));
+    const start = formatSeconds(startSec);
+    const end = formatSeconds(endSec);
+    const dedupKey = `${start}|${text}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
+
+    segments.push({ start, end, text });
+  }
+
+  return segments;
+}
+
+function formatSeconds(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
