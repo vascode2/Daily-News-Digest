@@ -70,7 +70,7 @@ Tell the user the output file path, channel/video counts, and any errors.
 ## Environment Variables (optional)
 ```
 NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
-NOTION_PAGE_ID=35cafdd37e7e80ebba93c73610e65f33  # News Digest parent page
+NOTION_PAGE_ID=your_32_character_notion_page_id  # News Digest parent page
 ```
 **No ANTHROPIC_API_KEY needed** — summarization runs through Claude Code.
 

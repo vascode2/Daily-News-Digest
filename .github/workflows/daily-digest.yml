@@ -101,7 +101,7 @@ jobs:
         if: steps.gate.outputs.should_run == 'true'
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_PAGE_ID: 35cafdd37e7e80ebba93c73610e65f33
+          NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
           NOTION_ROOT_TITLE: News Digest
           DIGEST_TIMEZONE: America/New_York
         run: npm run publish

@@ -1,8 +1,13 @@
 # Daily News Digest
 
-Korean general-news and economy-leaning YouTube digest. Every morning at 7 AM EDT, GitHub Actions checks the configured channels, summarizes yesterday's videos with Claude Code, and publishes a new child page under the Notion page:
+> A morning briefing that turns Korean general-news and economy YouTube into one skimmable Notion page.
 
-https://www.notion.so/News-Digest-35cafdd37e7e80ebba93c73610e65f33
+**[See the visual explanation ->](https://vascode2.github.io/Daily-News-Digest/)**
+*(One-page walkthrough with a flowchart, inputs/outputs, and a mock digest preview.)*
+
+---
+
+Korean general-news and economy-leaning YouTube digest. Every morning at 7 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Claude Code, and publishes a new child page under your configured Notion page.
 
 ## What It Watches
 
@@ -32,7 +37,7 @@ The daily workflow is [.github/workflows/daily-digest.yml](.github/workflows/dai
 
 - Schedule: `0 11,12 * * *` with an in-workflow timezone gate
 - Time: exactly 7 AM in `America/New_York` year-round; GitHub cron wakes at both UTC offsets and skips the non-7 AM run
-- Notion parent page: `35cafdd37e7e80ebba93c73610e65f33`
+- Notion parent page: stored privately as the `NOTION_PAGE_ID` GitHub secret
 
 Manual workflows are also available:
 
@@ -52,9 +57,10 @@ Manual workflows are also available:
    | --- | --- |
    | `CLAUDE_CODE_OAUTH_TOKEN` | Token from `claude setup-token` |
    | `NOTION_TOKEN` | Notion integration token |
+   | `NOTION_PAGE_ID` | Parent Notion page ID for News Digest |
    | `YOUTUBE_COOKIES_B64` | Base64 YouTube cookies for yt-dlp |
 
-   The workflow sets `NOTION_PAGE_ID` directly to the News Digest page ID.
+   Do not commit real token values or private page IDs to the repository.
 
 3. In Notion, share the News Digest page with the same integration used by `NOTION_TOKEN`.
 
