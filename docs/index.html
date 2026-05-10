@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily News Digest — How It Works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+<style>
+  /* CSS Custom Properties — exact names required */
+  :root {
+    --bg: #0A0A0A;
+    --surface: #141414;
+    --surface-hover: #1c1c1c;
+    --border: rgba(255,255,255,0.08);
+    --text: #EDEDED;
+    --text-secondary: rgba(237,237,237,0.7);
+    --accent: #FF6B35;
+    --accent-secondary: #4ECDC4;
+    --positive: #4ECDC4;
+    --negative: #FF6B6B;
+    --warning: #FFD93D;
+    --shadow-soft: 0 4px 20px rgba(0,0,0,0.3);
+    --shadow-strong: 0 12px 40px rgba(0,0,0,0.5);
+  }
+
+  .theme-dark {
+    --bg: #0A0A0A;
+    --surface: #141414;
+    --surface-hover: #1c1c1c;
+    --border: rgba(255,255,255,0.08);
+    --text: #EDEDED;
+    --text-secondary: rgba(237,237,237,0.7);
+    --accent: #FF6B35;
+    --accent-secondary: #4ECDC4;
+    --positive: #4ECDC4;
+    --negative: #FF6B6B;
+    --warning: #FFD93D;
+  }
+
+  .theme-light {
+    --bg: #FAFAF9;
+    --surface: #FFFFFF;
+    --surface-hover: #F4F4F2;
+    --border: rgba(15,23,42,0.08);
+    --text: #0f172a;
+    --text-secondary: rgba(15,23,42,0.65);
+    --accent: #E55100;
+    --accent-secondary: #00897B;
+    --positive: #00897B;
+    --negative: #C62828;
+    --warning: #F57F17;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 400;
+    line-height: 1.6;
+    transition: background 0.3s ease, color 0.3s ease;
+    overflow-x: hidden;
+  }
+
+  /* Skip to content */
+  .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 8px;
+    background: var(--accent);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    text-decoration: none;
+    z-index: 9999;
+  }
+  .skip-link:focus { top: 8px; }
+
+  /* Container */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 64px 24px;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 80px 0 64px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 64px;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 32px;
+  }
+  .hero-badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--positive);
+    box-shadow: 0 0 8px var(--positive);
+  }
+
+  h1 {
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 0 0 24px;
+    color: var(--text);
+  }
+  h1 .accent {
+    color: var(--accent);
+  }
+
+  .hero-tagline {
+    font-size: clamp(1.125rem, 2vw, 1.375rem);
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin: 0 auto 40px;
+    line-height: 1.5;
+  }
+
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  .hero-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Section */
+  section {
+    margin-bottom: 80px;
+    scroll-margin-top: 24px;
+  }
+
+  h2 {
+    font-size: clamp(2rem, 3.5vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin: 0 0 16px;
+    color: var(--text);
+  }
+
+  .section-subtitle {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+    margin-bottom: 48px;
+    max-width: 720px;
+  }
+
+  h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    color: var(--text);
+  }
+
+  p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* Three column grid */
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    min-height: 200px;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-soft);
+    border-color: rgba(255,107,53,0.3);
+  }
+
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    background: rgba(255,107,53,0.12);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+
+  /* Step cards (numbered) */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 40px;
+  }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    position: relative;
+  }
+  .step-num {
+    position: absolute;
+    top: -16px;
+    left: 24px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+  }
+  .step h4 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 8px 0 8px;
+    color: var(--text);
+  }
+  .step p {
+    font-size: 0.9375rem;
+    margin: 0;
+  }
+  .step-tag {
+    display: inline-block;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-top: 12px;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  /* Mermaid flowchart container */
+  .flow-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 48px 24px;
+    overflow-x: auto;
+    margin: 40px 0;
+  }
+  .mermaid {
+    text-align: center;
+  }
+
+  /* Notion mock */
+  .notion-mock {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px;
+    box-shadow: var(--shadow-soft);
+    max-width: 760px;
+    margin: 40px auto 0;
+  }
+  .notion-mock-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+  .notion-mock-meta {
+    border-left: 3px solid var(--accent);
+    padding: 8px 16px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 24px;
+    background: var(--surface-hover);
+    border-radius: 0 6px 6px 0;
+  }
+  .channel-header {
+    color: var(--negative);
+    font-weight: 600;
+    margin: 32px 0 16px;
+    font-size: 1.0625rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .video-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 20px 0 12px;
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-underline-offset: 4px;
+  }
+  .label {
+    font-weight: 600;
+    color: var(--text);
+    margin: 16px 0 6px;
+    font-size: 0.9375rem;
+  }
+  .video-summary {
+    border-left: 3px solid var(--border);
+    padding-left: 16px;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    margin: 4px 0 12px;
+    line-height: 1.6;
+  }
+  .timeline-list {
+    margin: 4px 0 12px;
+    padding-left: 22px;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
+  .timeline-list li { margin: 2px 0; }
+  .timeline-list code {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    background: var(--surface-hover);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    color: var(--text);
+  }
+  .video-insight {
+    color: var(--warning);
+    font-size: 0.9375rem;
+    margin: 12px 0;
+  }
+  .video-divider {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+
+  /* Two-column compare */
+  .two-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+    margin-top: 32px;
+  }
+  .compare-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+  }
+  .compare-label {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .compare-card h3 { margin-bottom: 12px; }
+  .compare-card ul {
+    margin: 16px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .compare-card li {
+    padding: 8px 0;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .compare-card li:last-child { border-bottom: none; }
+  .compare-card li::before {
+    content: '→';
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* Schedule timeline */
+  .schedule {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 32px;
+  }
+  .schedule-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .schedule-item.auto::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--positive);
+  }
+  .schedule-item.manual::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--warning);
+  }
+  .schedule-tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    display: inline-block;
+  }
+  .schedule-tag.auto {
+    background: rgba(78,205,196,0.15);
+    color: var(--positive);
+  }
+  .schedule-tag.manual {
+    background: rgba(255,217,61,0.15);
+    color: var(--warning);
+  }
+  .schedule-time {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 4px 0 8px;
+  }
+  .schedule-desc {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+  }
+
+  /* Stats */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-top: 40px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+  }
+  .stat-num {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  /* CTA box */
+  .cta {
+    background: linear-gradient(135deg, rgba(255,107,53,0.08) 0%, rgba(78,205,196,0.05) 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 48px;
+    text-align: center;
+    margin-top: 80px;
+  }
+  .cta h2 { margin-bottom: 16px; }
+  .cta p { font-size: 1.125rem; margin-bottom: 32px; }
+  .cta-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+  }
+  .btn-secondary:hover {
+    background: var(--surface-hover);
+  }
+
+  /* Utility menu */
+  .viz-menu {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 9999;
+  }
+  .viz-menu-toggle {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+  }
+  .viz-menu-toggle:hover {
+    background: var(--surface-hover);
+  }
+  .viz-menu-dropdown {
+    position: absolute;
+    top: 48px;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px;
+    min-width: 180px;
+    box-shadow: var(--shadow-strong);
+    display: none;
+    flex-direction: column;
+  }
+  .viz-menu-dropdown.open { display: flex; }
+  .viz-menu-dropdown button {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 10px 14px;
+    text-align: left;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s ease;
+  }
+  .viz-menu-dropdown button:hover {
+    background: var(--surface-hover);
+  }
+
+  /* Animations */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .animate {
+    animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .delay-1 { animation-delay: 0.1s; }
+  .delay-2 { animation-delay: 0.2s; }
+  .delay-3 { animation-delay: 0.3s; }
+  .delay-4 { animation-delay: 0.4s; }
+
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  [data-reveal].revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .container { padding: 40px 16px; }
+    .hero { padding: 48px 0 40px; margin-bottom: 48px; }
+    section { margin-bottom: 56px; }
+    .card { padding: 24px; }
+    .cta { padding: 32px 20px; }
+  }
+
+  @media (max-width: 375px) {
+    body { overflow-x: hidden; }
+    .container { padding: 32px 12px; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.75rem; }
+    .stat-num { font-size: 2rem; }
+  }
+
+  /* Print */
+  @media print {
+    .viz-menu { display: none; }
+    body { background: white; color: black; }
+    .card, .step, .compare-card, .schedule-item, .stat, .notion-mock {
+      page-break-inside: avoid;
+      box-shadow: none;
+      border: 1px solid #ddd;
+    }
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+    [data-reveal] {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>
+</head>
+<body class="theme-dark">
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+
+<!-- Utility menu (mandatory) -->
+<div class="viz-menu" role="navigation" aria-label="Utilities">
+  <button class="viz-menu-toggle" onclick="toggleMenu()" aria-label="Open utility menu">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+  <div class="viz-menu-dropdown" id="vizMenuDropdown">
+    <button onclick="cycleTheme()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      Toggle theme
+    </button>
+    <button onclick="downloadImage()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download PNG
+    </button>
+    <button onclick="window.print()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print / PDF
+    </button>
+  </div>
+</div>
+
+<main id="main-content">
+  <div class="container">
+
+    <!-- Hero -->
+    <header class="hero" role="banner">
+      <div class="hero-badge animate">
+        <span class="dot"></span>
+        Running every morning at 7 AM
+      </div>
+      <h1 class="animate delay-1">Wake up to a daily summary of <span class="accent">YouTube videos</span> you actually care about</h1>
+      <p class="hero-tagline animate delay-2">A personal robot that watches your favorite YouTube channels overnight, writes a clean summary of each new video, and drops them into your Notion before you finish your coffee.</p>
+      <div class="hero-meta animate delay-3">
+        <span class="hero-meta-item">📺 8 channels watched</span>
+        <span class="hero-meta-item">⏱️ ~5 minutes per run</span>
+        <span class="hero-meta-item">💰 No API key needed</span>
+        <span class="hero-meta-item">☁️ Runs in the cloud</span>
+      </div>
+    </header>
+
+    <!-- Why -->
+    <section data-reveal>
+      <h2>Why this exists</h2>
+      <p class="section-subtitle">YouTube subscriptions pile up. Half of what's posted isn't relevant. Watching a 30-minute video to find out it's not useful is a waste. This system reads everything for you and gives you the gist.</p>
+
+      <div class="grid-3">
+        <article class="card">
+          <div class="card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3>Save hours every week</h3>
+          <p>Skip videos that aren't relevant. Read a 3-line summary, decide if you want to watch the full thing.</p>
+        </article>
+
+        <article class="card">
+          <div class="card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <h3>Never miss the good stuff</h3>
+          <p>A trusted channel posts something important and you scrolled past it? Not anymore. Every video gets a glance.</p>
+        </article>
+
+        <article class="card">
+          <div class="card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>One inbox for everything</h3>
+          <p>All summaries land in one Notion page. Search, browse, share with your team, archive old ones.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- How it works flowchart -->
+    <section data-reveal>
+      <h2>How it works</h2>
+      <p class="section-subtitle">Five steps, fully automated, every morning. You don't touch anything — your computer doesn't even need to be on.</p>
+
+      <div class="flow-wrapper">
+        <div class="mermaid">
+flowchart TD
+    A([⏰ 7 AM trigger<br/>cloud server wakes up]) --> B[📥 STEP 1: Collect<br/>Visit every channel<br/>Find videos posted yesterday]
+    B --> C[🤖 STEP 2: Summarize<br/>Read each video's transcript<br/>Write a 3-line summary]
+    C --> D[✅ STEP 3: Review<br/>Check formatting<br/>Fix any issues]
+    D --> E[📝 STEP 4: Publish<br/>Create a new Notion page<br/>Save a backup to GitHub]
+    E --> F([📧 You wake up<br/>open Notion<br/>read summaries])
+
+    style A fill:#FF6B35,stroke:#FF6B35,color:#fff
+    style F fill:#4ECDC4,stroke:#4ECDC4,color:#000
+    style B fill:#141414,stroke:#FF6B35,color:#EDEDED
+    style C fill:#141414,stroke:#FF6B35,color:#EDEDED
+    style D fill:#141414,stroke:#FF6B35,color:#EDEDED
+    style E fill:#141414,stroke:#FF6B35,color:#EDEDED
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h4>Collect new videos</h4>
+          <p>A tool called yt-dlp visits each YouTube channel on your list, finds videos uploaded yesterday, and grabs their titles, descriptions, and captions.</p>
+          <span class="step-tag">yt-dlp + cookies</span>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h4>Summarize with AI</h4>
+          <p>Claude (an AI assistant) reads each video's content and writes a structured summary: 2–4 sentences of the gist, key timestamps, and one-line takeaway.</p>
+          <span class="step-tag">Claude Haiku 4.5</span>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h4>Quality check</h4>
+          <p>A small program checks each summary follows the right format. Catches missing sections, fixes timestamps, makes sure nothing's broken before publishing.</p>
+          <span class="step-tag">Node.js validator</span>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <h4>Publish to Notion</h4>
+          <p>Creates a new page inside your "News Digest" parent page. Each video becomes a clickable link. Channel names show up in red so you can scan fast.</p>
+          <span class="step-tag">Notion API</span>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <h4>Save a backup</h4>
+          <p>Same content also gets saved to GitHub so you have a permanent archive. Useful if Notion has issues or you want to grep old summaries later.</p>
+          <span class="step-tag">Git commit</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- What you get -->
+    <section data-reveal>
+      <h2>What you actually see</h2>
+      <p class="section-subtitle">A new Notion page lands every morning. Here's exactly what one entry looks like — clickable channel header, clickable video title, one-line takeaway, key summary, and a clickable timeline that jumps to the exact moment in the video.</p>
+
+      <div class="notion-mock">
+        <div class="notion-mock-title">2026-05-02</div>
+        <div class="notion-mock-meta">Generated: 07:15 GMT-4 · Channels: 3 · Videos: 6 · Errors: 0</div>
+
+        <div class="channel-header">📺 <a href="https://www.youtube.com/@aiDotEngineer">AI Engineer</a></div>
+
+        <div class="video-title">Building Conversational Agents with Gemini Live API</div>
+        <div class="video-insight">💡 Real-time multimodal agents are getting cheap and fast — worth a serious look for any voice or IoT product.</div>
+        <div class="label">Key Summary</div>
+        <div class="video-summary">Google DeepMind engineers walk through building a real-time voice assistant with the new Live API. The session covers WebSocket setup, multimodal streaming input (audio + screen share), and how to invoke tools mid-conversation without breaking the audio loop.<br /><br />In the live demo they swap a stock prompt for a tool-aware one and show latency dropping from ~900ms to ~250ms once partial audio streaming is enabled, then add a calendar tool call mid-turn to demonstrate uninterrupted speech.</div>
+        <div class="label">Key Timeline</div>
+        <ul class="timeline-list">
+          <li><a href="#"><code>00:00:42</code></a> Why streaming-first APIs change agent design</li>
+          <li><a href="#"><code>00:04:18</code></a> Setting up the WebSocket session and auth</li>
+          <li><a href="#"><code>00:11:30</code></a> Handling barge-in and turn detection</li>
+          <li><a href="#"><code>00:18:55</code></a> Tool calls during a live conversation</li>
+          <li><a href="#"><code>00:25:10</code></a> Production tips: cost, latency, fallbacks</li>
+        </ul>
+
+        <hr class="video-divider" />
+
+        <div class="video-title">Why Building Eval Platforms Is Hard</div>
+        <div class="video-insight">💡 If you ship AI features, a real eval pipeline matters more than your model choice.</div>
+        <div class="label">Key Summary</div>
+        <div class="video-summary">A Braintrust engineer breaks down why "good" is so hard to define for AI outputs. He walks through the labeling, versioning, and team-alignment problems most eval teams hit by month three, and proposes a minimal scoring loop that scales without a full platform.<br /><br />As a concrete example he shows two labelers scoring the same 50 outputs and disagreeing on 18 of them, then demonstrates how a tiny rubric and a paired-review step cut disagreement down to 4 — without buying any new tooling.</div>
+        <div class="label">Key Timeline</div>
+        <ul class="timeline-list">
+          <li><a href="#"><code>00:01:20</code></a> The illusion of "we'll just measure quality"</li>
+          <li><a href="#"><code>00:07:45</code></a> Labelers disagree more than you think</li>
+          <li><a href="#"><code>00:14:02</code></a> Versioning prompts vs. versioning datasets</li>
+          <li><a href="#"><code>00:22:30</code></a> A minimal scoring loop that actually works</li>
+        </ul>
+
+        <hr class="video-divider" />
+
+        <div class="channel-header">📺 <a href="https://www.youtube.com/@careerhackeralex">Career Hacker Alex</a></div>
+
+        <div class="video-title">The 200-LoC Skill That Replaced 12,000 Lines of Code</div>
+        <div class="video-insight">💡 Markdown-driven workflows are the new "config as code" — most internal tools are over-engineered.</div>
+        <div class="label">Key Summary</div>
+        <div class="video-summary">A walkthrough of how an engineer rewrote a complex Git Worktrees feature as a Claude Code Skill — going from 12,000 lines of TypeScript to ~200 lines of plain markdown. Covers the trade-offs, what broke, and where the markdown approach hits its limits.<br /><br />The demo shows the original TypeScript version handling a stale-lock edge case in 80 lines, vs. the markdown skill solving the same case with a single instruction line plus a tool call — a useful example of where prose beats code, and one case where it doesn't.</div>
+        <div class="label">Key Timeline</div>
+        <ul class="timeline-list">
+          <li><a href="#"><code>00:02:10</code></a> The original 12K-line implementation</li>
+          <li><a href="#"><code>00:06:40</code></a> Rewriting it as a markdown skill</li>
+          <li><a href="#"><code>00:13:25</code></a> Edge cases that the markdown version handles worse</li>
+          <li><a href="#"><code>00:17:50</code></a> When markdown wins, when it doesn't</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Schedules -->
+    <section data-reveal>
+      <h2>What runs and when</h2>
+      <p class="section-subtitle">Three different jobs you can use. The daily one is fully automatic; the other two run on demand.</p>
+
+      <div class="schedule">
+        <div class="schedule-item auto">
+          <span class="schedule-tag auto">AUTO</span>
+          <div class="schedule-time">Every day · 7:00 AM</div>
+          <h3>Daily Digest</h3>
+          <p class="schedule-desc">Yesterday's videos from all 8 channels. Runs by itself in the cloud. You don't have to do anything.</p>
+        </div>
+
+        <div class="schedule-item manual">
+          <span class="schedule-tag manual">MANUAL</span>
+          <div class="schedule-time">On demand</div>
+          <h3>Weekly Recap</h3>
+          <p class="schedule-desc">Last 7 days, all channels, capped at 3 videos per channel. Click "Run workflow" when you want a Sunday-style review.</p>
+        </div>
+
+        <div class="schedule-item manual">
+          <span class="schedule-tag manual">MANUAL</span>
+          <div class="schedule-time">On demand</div>
+          <h3>Single Channel Catch-up</h3>
+          <p class="schedule-desc">Pick one channel (e.g., @unrealtech), get the most recent N videos summarized in one Notion page. Useful for new subscriptions.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- The pieces -->
+    <section data-reveal>
+      <h2>The free vs paid trick</h2>
+      <p class="section-subtitle">Most "AI summary" tools charge a monthly API fee. This one piggybacks on existing subscriptions, so the running cost is essentially zero.</p>
+
+      <div class="two-col">
+        <div class="compare-card">
+          <span class="compare-label">Most automation tools</span>
+          <h3>Need their own API key</h3>
+          <ul>
+            <li>Sign up for an OpenAI / Anthropic API account</li>
+            <li>Add a credit card</li>
+            <li>Pay per summary (a few cents each)</li>
+            <li>Monitor usage so you don't get billed too much</li>
+          </ul>
+        </div>
+        <div class="compare-card">
+          <span class="compare-label">This system</span>
+          <h3>Reuses your Claude subscription</h3>
+          <ul>
+            <li>Already paying for Claude Pro? It's covered</li>
+            <li>One-time setup: copy a token, paste into GitHub</li>
+            <li>$0 added cost (uses subscription quota)</li>
+            <li>GitHub Actions itself is free for public repos</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section data-reveal>
+      <h2>Quick numbers</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-num">~5 min</div>
+          <div class="stat-label">to run end-to-end</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">8</div>
+          <div class="stat-label">channels watched daily</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">$0</div>
+          <div class="stat-label">monthly cost (with Claude Pro)</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">24/7</div>
+          <div class="stat-label">runs even when laptop is off</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta" data-reveal>
+      <h2>See the actual code</h2>
+      <p>This whole system is open source. Fork it, customize the channels, change the format — it's yours.</p>
+      <div class="cta-buttons">
+        <a class="btn btn-primary" href="https://github.com/vascode2/Daily-News-Digest" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub repo
+        </a>
+        <a class="btn btn-secondary" href="https://github.com/vascode2/Daily-News-Digest/blob/main/CLAUDE.md" target="_blank" rel="noopener">
+          📘 CLAUDE.md (system brain)
+        </a>
+        <a class="btn btn-secondary" href="https://github.com/vascode2/Daily-News-Digest/tree/main/.github/workflows" target="_blank" rel="noopener">
+          ⚙️ Workflow files
+        </a>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script>
+  // Top-level: var only
+  var initialTheme = (function() {
+    var stored = null;
+    try { stored = localStorage.getItem('viz-theme'); } catch (e) {}
+    if (stored === 'theme-light' || stored === 'theme-dark') return stored;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return prefersDark ? 'theme-dark' : 'theme-light';
+  })();
+
+  function applyTheme(t) {
+    document.documentElement.className = t;
+    document.body.className = t;
+    try { localStorage.setItem('viz-theme', t); } catch (e) {}
+    initMermaid();
+  }
+
+  function cycleTheme() {
+    var current = document.documentElement.className.indexOf('theme-dark') !== -1 ? 'theme-dark' : 'theme-light';
+    applyTheme(current === 'theme-dark' ? 'theme-light' : 'theme-dark');
+  }
+
+  function toggleMenu() {
+    var dd = document.getElementById('vizMenuDropdown');
+    if (dd) dd.classList.toggle('open');
+  }
+
+  function downloadImage() {
+    if (typeof htmlToImage === 'undefined') return;
+    var node = document.getElementById('main-content');
+    htmlToImage.toPng(node, { backgroundColor: getComputedStyle(document.body).backgroundColor })
+      .then(function(dataUrl) {
+        var link = document.createElement('a');
+        link.download = 'daily-news-digest-how-it-works.png';
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch(function(e) { console.error('PNG export failed:', e); });
+  }
+
+  // Outside click closes menu
+  document.addEventListener('click', function(e) {
+    var dd = document.getElementById('vizMenuDropdown');
+    if (!e.target.closest('.viz-menu') && dd) dd.classList.remove('open');
+  });
+
+  // Escape closes menu
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var dd = document.getElementById('vizMenuDropdown');
+      if (dd) dd.classList.remove('open');
+    }
+  });
+
+  // Mermaid theme-aware init
+  function initMermaid() {
+    if (typeof mermaid === 'undefined') return;
+    var isDark = document.documentElement.className.indexOf('theme-dark') !== -1;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      themeVariables: {
+        background: isDark ? '#0A0A0A' : '#FAFAF9',
+        primaryColor: isDark ? '#141414' : '#FFFFFF',
+        primaryTextColor: isDark ? '#EDEDED' : '#0f172a',
+        primaryBorderColor: '#FF6B35',
+        lineColor: isDark ? '#FF6B35' : '#E55100',
+        secondaryColor: '#4ECDC4',
+        tertiaryColor: isDark ? '#1c1c1c' : '#F4F4F2',
+        fontFamily: 'Inter, sans-serif'
+      },
+      securityLevel: 'loose'
+    });
+    // Re-render
+    var els = document.querySelectorAll('.mermaid');
+    els.forEach(function(el, i) {
+      if (!el.dataset.original) el.dataset.original = el.textContent;
+      el.removeAttribute('data-processed');
+      el.innerHTML = el.dataset.original;
+    });
+    try { mermaid.run({ querySelector: '.mermaid' }); } catch (e) { console.error(e); }
+  }
+
+  // Reveal on scroll
+  function setupReveal() {
+    var els = document.querySelectorAll('[data-reveal]');
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function(el) { el.classList.add('revealed'); });
+      return;
+    }
+    var obs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          obs.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    els.forEach(function(el) { obs.observe(el); });
+  }
+
+  // Init
+  document.addEventListener('DOMContentLoaded', function() {
+    applyTheme(initialTheme);
+    setupReveal();
+  });
+</script>
+
+</body>
+</html>

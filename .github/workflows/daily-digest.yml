@@ -1,0 +1,97 @@
+name: '[AUTO] Daily News Digest'
+
+on:
+  schedule:
+    # 11:00 UTC = 07:00 EDT (summer) / 06:00 EST (winter). Runs daily.
+    - cron: '0 11 * * *'
+  workflow_dispatch: {}  # Manual trigger from GitHub UI
+
+permissions:
+  contents: write  # output/ 커밋 권한
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install yt-dlp (latest GitHub release)
+        run: |
+          sudo curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
+          yt-dlp --version
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Verify tools
+        run: |
+          node --version
+          yt-dlp --version
+          claude --version
+
+      - name: Collect yesterday's videos
+        env:
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+          DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
+        run: npm run collect
+
+      - name: Summarize via Claude Code
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude --print --dangerously-skip-permissions --model claude-haiku-4-5-20251001 \
+            "CI MODE — ONLY DO STEP 2 OF THE PIPELINE. Do NOT run any npm commands. Do NOT write to output/. Do NOT trigger review or publish. Ignore CLAUDE.md's full-pipeline instructions; the workflow handles those.
+
+            Your single job:
+            1. Find the latest tmp/raw-*.json file (use Bash 'ls -t tmp/raw-*.json | head -1' or Glob).
+            2. Read it. Read config/format.md and agents/summarizer.md — these are the SOURCE OF TRUTH for output format. Follow them exactly.
+            3. Write a summary file to tmp/summaries-<KEY>.md where <KEY> matches the raw filename (raw-2026-04-30.json → summaries-2026-04-30.md).
+
+            Hard requirements (in addition to format.md):
+            - First line: '# News Digest — <KEY>'
+            - Channel header MUST be a hyperlink: '### 📺 [ChannelName](https://www.youtube.com/<channel-handle-from-raw>)' using the channelName field for display text and the channel handle for the URL.
+            - Each video title MUST be h2 with clickable YouTube link: '## [Title](https://www.youtube.com/watch?v=VIDEO_ID)'.
+            - Section order per video: '한 줄 인사이트' → '핵심 요약' → '주요 타임라인'.
+            - 핵심 요약 = intro 1–2 sentences + **3–5 numbered points with bold sub-headings** (e.g., '1. **소제목**'), each with 1–3 sub-bullets containing concrete names/companies/numbers/years pulled from the transcript. End each sub-bullet (or the point itself) with an inline timestamp '[[HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)]'. NO blockquote '>' prefix. NO generic takeaway or '실무 적용' sentences — stay faithful to what the video actually said. The '주요 타임라인' section is OPTIONAL when 3+ inline timestamps already exist in the body — prefer to OMIT it.
+            - 주요 타임라인 lines MUST be hyperlinked: '- [HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS) description'. Only emit when transcriptSegments exist; never invent timestamps.
+            - DO NOT include upload dates, view counts, duration, or transcript indicators.
+            - Separator '---' between videos.
+
+            STOP immediately after writing tmp/summaries-<KEY>.md. Do not run any other commands. Do not modify output/ or any other location."
+
+      - name: Review summaries
+        id: review
+        continue-on-error: true
+        run: npm run review
+
+      - name: Publish to Notion + repo
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PAGE_ID: 35cafdd37e7e80ebba93c73610e65f33
+          NOTION_ROOT_TITLE: News Digest
+          DIGEST_TIMEZONE: America/New_York
+        run: npm run publish
+
+      - name: Commit output back to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/
+          if git diff --cached --quiet; then
+            echo "No new digest output to commit."
+            exit 0
+          fi
+          git commit -m "Auto: daily news digest $(date -u +%Y-%m-%d)"
+          # Retry up to 3 times in case remote moved while we were running
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin main && exit 0
+            echo "Push attempt $i failed, retrying..."
+            sleep 3
+          done
+          echo "Push failed after 3 retries"; exit 1

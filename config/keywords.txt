@@ -1,0 +1,14 @@
+# Keyword filter (optional)
+# If any keywords are listed below (uncommented), only videos matching at least one keyword will be included.
+# Leave all lines commented to include all videos.
+# Case-insensitive partial match (matches title, description, or transcript).
+
+# Examples for economy / general news:
+# 금리
+# 환율
+# 부동산
+# 한국은행
+# 트럼프
+
+# Usually leave this file commented out. Use per-channel follow filters in
+# config/channels.txt for people or recurring topics, e.g. @3protv :: 오건영

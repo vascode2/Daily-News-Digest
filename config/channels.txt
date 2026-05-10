@@ -1,0 +1,25 @@
+# YouTube channels to monitor
+# One handle per line. Lines starting with # are ignored.
+#
+# Optional follow filter syntax:
+#   @channel :: keyword1, keyword2
+# Videos from that channel are included only when title, description, or
+# transcript text contains at least one keyword.
+
+# General news / economy feed
+@kpunch
+@Prof.Park_Yeouidomention
+@손경제
+@syukaworld
+@lucky_tv
+@moneydo
+@understanding.
+@sbs_explained
+@videomug0
+
+# 오건영 follow list — include only videos where he appears or is mentioned
+@ShinhanPremier :: 오건영
+@머니올라 :: 오건영
+@3protv :: 오건영
+@연합뉴스경제TV :: 오건영
+@hkwowtv :: 오건영

@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>How Daily News Digest Works — Under the Hood</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>Chart.defaults.animation = false;</script>
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+<style>
+  :root {
+    --bg: #0A0A0A;
+    --surface: #141414;
+    --surface-hover: #1c1c1c;
+    --border: rgba(255,255,255,0.08);
+    --text: #EDEDED;
+    --text-secondary: rgba(237,237,237,0.7);
+    --accent: #7C5CFF;
+    --accent-secondary: #00D4AA;
+    --positive: #00D4AA;
+    --negative: #FF5F5F;
+    --warning: #FFB347;
+    --code-bg: #0F0F12;
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .theme-dark {
+    --bg: #0A0A0A;
+    --surface: #141414;
+    --surface-hover: #1c1c1c;
+    --border: rgba(255,255,255,0.08);
+    --text: #EDEDED;
+    --text-secondary: rgba(237,237,237,0.7);
+    --accent: #7C5CFF;
+    --accent-secondary: #00D4AA;
+    --positive: #00D4AA;
+    --negative: #FF5F5F;
+    --warning: #FFB347;
+    --code-bg: #0F0F12;
+  }
+
+  .theme-light {
+    --bg: #FAFAF9;
+    --surface: #FFFFFF;
+    --surface-hover: #F4F4F2;
+    --border: rgba(15,23,42,0.10);
+    --text: #0f172a;
+    --text-secondary: rgba(15,23,42,0.65);
+    --accent: #5B3FE5;
+    --accent-secondary: #00897B;
+    --positive: #00897B;
+    --negative: #C62828;
+    --warning: #E68A00;
+    --code-bg: #F8F8F6;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 400;
+    line-height: 1.6;
+    transition: background 0.3s ease, color 0.3s ease;
+    overflow-x: hidden;
+  }
+
+  /* Subtle dot grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
+    background-size: 32px 32px;
+    pointer-events: none;
+    opacity: 0.4;
+    z-index: 0;
+  }
+
+  .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 8px;
+    background: var(--accent);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    text-decoration: none;
+    z-index: 9999;
+  }
+  .skip-link:focus { top: 8px; }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 64px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 64px 0 56px;
+    margin-bottom: 64px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    margin-bottom: 24px;
+    font-weight: 600;
+  }
+  .eyebrow::before, .eyebrow::after {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: var(--accent);
+    opacity: 0.4;
+  }
+
+  h1 {
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 0 0 20px;
+    color: var(--text);
+  }
+
+  .hero-tagline {
+    font-size: clamp(1.0625rem, 2vw, 1.25rem);
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin: 0 auto 40px;
+  }
+
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .toc a {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    transition: all 0.2s;
+  }
+  .toc a:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  /* Sections */
+  section {
+    margin-bottom: 96px;
+    scroll-margin-top: 24px;
+  }
+
+  h2 {
+    font-size: clamp(1.875rem, 3.5vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin: 0 0 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  h2 .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .section-lead {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+    max-width: 720px;
+    margin: 0 0 48px;
+    line-height: 1.6;
+  }
+
+  h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    color: var(--text);
+  }
+
+  /* Architecture diagram */
+  .arch-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 56px 32px;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .arch-svg {
+    display: block;
+    width: 100%;
+    max-width: 1100px;
+    height: auto;
+    margin: 0 auto;
+  }
+  .arch-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    justify-content: center;
+    margin-top: 32px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  .arch-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .arch-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* Step accordion */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  details.step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  details.step[open] {
+    border-color: var(--accent);
+    box-shadow: var(--shadow);
+  }
+  details.step summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 28px 32px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 24px;
+  }
+  details.step summary::-webkit-details-marker { display: none; }
+  .step-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(124,92,255,0.12);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-meta h3 {
+    font-size: 1.25rem;
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+  .step-meta p {
+    margin: 0;
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+  }
+  .step-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    background: var(--surface-hover);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .chevron {
+    width: 24px;
+    height: 24px;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+  }
+  details.step[open] .chevron { transform: rotate(180deg); }
+
+  .step-body {
+    padding: 0 32px 32px;
+    border-top: 1px solid var(--border);
+    margin-top: 0;
+  }
+  .step-body-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 24px;
+  }
+  .step-detail-card {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .step-detail-card h4 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin: 0 0 12px;
+  }
+  .step-detail-card ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .step-detail-card li {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    padding: 4px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .step-detail-card li::before {
+    content: '·';
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .step-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .tool-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    background: rgba(124,92,255,0.1);
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(124,92,255,0.2);
+  }
+
+  /* Chart container */
+  .chart-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px;
+    height: 360px;
+    box-shadow: var(--shadow);
+  }
+  .chart-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 32px;
+    margin-top: 32px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  .chart-meta strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Code blocks */
+  .data-flow {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 32px;
+  }
+  .stage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stage-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stage-title {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .stage-arrow {
+    margin-left: auto;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  pre .comment { color: var(--text-secondary); }
+  pre .key { color: var(--accent); }
+  pre .string { color: var(--accent-secondary); }
+
+  /* Failure modes table */
+  .failure-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+  }
+  .failure-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .failure-card:hover {
+    border-color: var(--warning);
+    box-shadow: var(--shadow);
+  }
+  .failure-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(255,179,71,0.12);
+    color: var(--warning);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  .failure-card h3 {
+    font-size: 1.125rem;
+    margin-bottom: 8px;
+  }
+  .failure-card p {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    margin: 0 0 16px;
+    line-height: 1.6;
+  }
+  .failure-card .recovery {
+    font-size: 0.8125rem;
+    color: var(--positive);
+    background: rgba(0,212,170,0.08);
+    border: 1px solid rgba(0,212,170,0.2);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 0;
+  }
+  .failure-card .recovery strong {
+    color: var(--positive);
+    font-weight: 600;
+  }
+
+  /* Clock visual */
+  .clock-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 48px;
+    text-align: center;
+    box-shadow: var(--shadow);
+  }
+  .clock {
+    width: 220px;
+    height: 220px;
+    margin: 0 auto 32px;
+    position: relative;
+  }
+  .clock-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 24px;
+    max-width: 720px;
+    margin: 32px auto 0;
+  }
+  .clock-stat {
+    text-align: center;
+  }
+  .clock-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .clock-stat-label {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Utility menu */
+  .viz-menu {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 9999;
+  }
+  .viz-menu-toggle {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+  }
+  .viz-menu-toggle:hover { background: var(--surface-hover); }
+  .viz-menu-dropdown {
+    position: absolute;
+    top: 48px;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px;
+    min-width: 180px;
+    box-shadow: var(--shadow);
+    display: none;
+    flex-direction: column;
+  }
+  .viz-menu-dropdown.open { display: flex; }
+  .viz-menu-dropdown button {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 10px 14px;
+    text-align: left;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s;
+  }
+  .viz-menu-dropdown button:hover { background: var(--surface-hover); }
+
+  /* Animations */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate {
+    animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .delay-1 { animation-delay: 0.1s; }
+  .delay-2 { animation-delay: 0.2s; }
+  .delay-3 { animation-delay: 0.3s; }
+
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  [data-reveal].revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .container { padding: 40px 16px; }
+    section { margin-bottom: 64px; }
+    .hero { padding: 40px 0 32px; margin-bottom: 48px; }
+    .arch-wrapper { padding: 32px 16px; }
+    details.step summary {
+      padding: 20px;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+    }
+    .step-time { display: none; }
+    .step-body { padding: 0 20px 20px; }
+    .step-body-grid { grid-template-columns: 1fr; }
+    .clock-section { padding: 32px 20px; }
+  }
+
+  @media (max-width: 375px) {
+    body { overflow-x: hidden; }
+    .container { padding: 32px 12px; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.625rem; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .step-meta h3 { font-size: 1rem; }
+  }
+
+  @media print {
+    .viz-menu, .toc, body::before { display: none; }
+    body { background: white; color: black; }
+    .arch-wrapper, details.step, .chart-container, .stage, .failure-card, .clock-section {
+      page-break-inside: avoid;
+      box-shadow: none;
+      border: 1px solid #ddd;
+    }
+    details.step { break-inside: avoid; }
+    details.step .step-body { display: block; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+    [data-reveal] { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body class="theme-dark">
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+
+<div class="viz-menu" role="navigation" aria-label="Utilities">
+  <button class="viz-menu-toggle" onclick="toggleMenu()" aria-label="Open utility menu">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="viz-menu-dropdown" id="vizMenuDropdown">
+    <button onclick="cycleTheme()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/></svg>
+      Toggle theme
+    </button>
+    <button onclick="downloadImage()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download PNG
+    </button>
+    <button onclick="window.print()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print / PDF
+    </button>
+  </div>
+</div>
+
+<main id="main-content">
+  <div class="container">
+
+    <!-- Hero -->
+    <header class="hero" role="banner">
+      <div class="eyebrow animate">Under the hood</div>
+      <h1 class="animate delay-1">How Daily News Digest actually works</h1>
+      <p class="hero-tagline animate delay-2">Every component, every step, every second. A behind-the-scenes look at the system that turns yesterday's YouTube uploads into your morning briefing.</p>
+      <nav class="toc animate delay-3" aria-label="Page sections">
+        <a href="#architecture">01 · Architecture</a>
+        <a href="#steps">02 · The 5 stages</a>
+        <a href="#timing">03 · Timing</a>
+        <a href="#dataflow">04 · Data flow</a>
+        <a href="#failures">05 · Failure modes</a>
+        <a href="#schedule">06 · Schedule</a>
+      </nav>
+    </header>
+
+    <!-- 01 Architecture -->
+    <section id="architecture" data-reveal>
+      <h2><span class="num">01</span> The system at a glance</h2>
+      <p class="section-lead">Four moving pieces, two destinations, one daily trigger. Every component has a single job and hands off to the next.</p>
+
+      <div class="arch-wrapper">
+        <svg class="arch-svg" viewBox="0 0 1100 460" xmlns="http://www.w3.org/2000/svg" aria-labelledby="arch-title" role="img">
+          <title id="arch-title">System architecture diagram showing data flow from YouTube channels through GitHub Actions cron, yt-dlp, Claude Code, validator, to Notion and GitHub repo destinations</title>
+
+          <!-- Sources column (left) -->
+          <g aria-label="Source channels">
+            <rect x="20" y="40" width="180" height="380" rx="14" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+            <text x="110" y="74" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700" font-family="Inter">SOURCES</text>
+            <text x="110" y="92" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Inter">YouTube channels</text>
+
+            <g font-family="Inter" font-size="12" fill="var(--text)">
+              <rect x="36" y="115" width="148" height="30" rx="6" fill="var(--code-bg)" stroke="var(--border)"/>
+              <text x="46" y="135" font-family="JetBrains Mono">@aiDotEngineer</text>
+
+              <rect x="36" y="155" width="148" height="30" rx="6" fill="var(--code-bg)" stroke="var(--border)"/>
+              <text x="46" y="175" font-family="JetBrains Mono">@unrealtech</text>
+
+              <rect x="36" y="195" width="148" height="30" rx="6" fill="var(--code-bg)" stroke="var(--border)"/>
+              <text x="46" y="215" font-family="JetBrains Mono">@dekilab</text>
+
+              <rect x="36" y="235" width="148" height="30" rx="6" fill="var(--code-bg)" stroke="var(--border)"/>
+              <text x="46" y="255" font-family="JetBrains Mono">@careerhackeralex</text>
+
+              <rect x="36" y="275" width="148" height="30" rx="6" fill="var(--code-bg)" stroke="var(--border)"/>
+              <text x="46" y="295" font-family="JetBrains Mono">@bitgapnam</text>
+
+              <rect x="36" y="315" width="148" height="30" rx="6" fill="var(--code-bg)" stroke="var(--border)"/>
+              <text x="46" y="335" font-family="JetBrains Mono">@Claudical</text>
+
+              <text x="110" y="370" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-style="italic">+ 2 more</text>
+              <text x="110" y="395" text-anchor="middle" fill="var(--text-secondary)" font-size="10" font-family="JetBrains Mono">config/channels.txt</text>
+            </g>
+          </g>
+
+          <!-- Trigger -->
+          <g>
+            <circle cx="280" cy="100" r="36" fill="var(--accent)" opacity="0.15"/>
+            <circle cx="280" cy="100" r="24" fill="var(--accent)"/>
+            <text x="280" y="105" text-anchor="middle" fill="white" font-size="11" font-family="JetBrains Mono" font-weight="700">07:00</text>
+            <text x="280" y="155" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter">Cron trigger</text>
+            <text x="280" y="171" text-anchor="middle" fill="var(--text-secondary)" font-size="10" font-family="Inter">GitHub Actions</text>
+          </g>
+
+          <!-- Pipeline boxes -->
+          <g font-family="Inter">
+            <!-- yt-dlp -->
+            <rect x="240" y="210" width="200" height="80" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="340" y="238" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700" letter-spacing="2">STEP 1</text>
+            <text x="340" y="258" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">yt-dlp</text>
+            <text x="340" y="276" text-anchor="middle" fill="var(--text-secondary)" font-size="11">collect videos</text>
+
+            <!-- Claude -->
+            <rect x="240" y="320" width="200" height="80" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="340" y="348" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700" letter-spacing="2">STEP 2</text>
+            <text x="340" y="368" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Claude Haiku</text>
+            <text x="340" y="386" text-anchor="middle" fill="var(--text-secondary)" font-size="11">summarize</text>
+
+            <!-- Validator -->
+            <rect x="490" y="210" width="200" height="80" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="590" y="238" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700" letter-spacing="2">STEP 3</text>
+            <text x="590" y="258" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">review.js</text>
+            <text x="590" y="276" text-anchor="middle" fill="var(--text-secondary)" font-size="11">validate format</text>
+
+            <!-- Publisher -->
+            <rect x="490" y="320" width="200" height="80" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="590" y="348" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700" letter-spacing="2">STEP 4</text>
+            <text x="590" y="368" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">publish.js</text>
+            <text x="590" y="386" text-anchor="middle" fill="var(--text-secondary)" font-size="11">post to Notion</text>
+          </g>
+
+          <!-- Destinations column (right) -->
+          <g>
+            <rect x="780" y="40" width="290" height="180" rx="14" fill="var(--surface)" stroke="var(--positive)" stroke-width="1.5"/>
+            <text x="925" y="74" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700" font-family="Inter">DESTINATION 1</text>
+            <text x="925" y="92" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Inter">Where you read it</text>
+            <rect x="800" y="110" width="250" height="92" rx="8" fill="var(--code-bg)" stroke="var(--border)"/>
+            <text x="925" y="138" text-anchor="middle" fill="var(--positive)" font-size="22" font-family="Inter" font-weight="700">📝 Notion</text>
+            <text x="925" y="160" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Inter">News Digest page</text>
+            <text x="925" y="178" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Inter">→ child page per day</text>
+            <text x="925" y="195" text-anchor="middle" fill="var(--text-secondary)" font-size="10" font-family="JetBrains Mono">api.notion.com</text>
+
+            <rect x="780" y="240" width="290" height="180" rx="14" fill="var(--surface)" stroke="var(--accent-secondary)" stroke-width="1.5"/>
+            <text x="925" y="274" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700" font-family="Inter">DESTINATION 2</text>
+            <text x="925" y="292" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Inter">Backup archive</text>
+            <rect x="800" y="310" width="250" height="92" rx="8" fill="var(--code-bg)" stroke="var(--border)"/>
+            <text x="925" y="338" text-anchor="middle" fill="var(--accent-secondary)" font-size="22" font-family="Inter" font-weight="700">🐙 GitHub</text>
+            <text x="925" y="360" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Inter">output/YYYY-MM-DD.md</text>
+            <text x="925" y="378" text-anchor="middle" fill="var(--text-secondary)" font-size="11" font-family="Inter">→ auto-commit + push</text>
+            <text x="925" y="395" text-anchor="middle" fill="var(--text-secondary)" font-size="10" font-family="JetBrains Mono">github.com/repo</text>
+          </g>
+
+          <!-- Arrows -->
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+              <path d="M0,0 L10,5 L0,10 Z" fill="var(--accent)"/>
+            </marker>
+            <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+              <path d="M0,0 L10,5 L0,10 Z" fill="var(--positive)"/>
+            </marker>
+          </defs>
+
+          <!-- arrows from sources to step1 -->
+          <line x1="200" y1="240" x2="240" y2="240" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+          <!-- step1 to step2 -->
+          <line x1="340" y1="290" x2="340" y2="318" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+          <!-- step2 to step3 -->
+          <path d="M 440 360 Q 470 360 470 290 L 490 250" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+          <!-- step3 to step4 -->
+          <line x1="590" y1="290" x2="590" y2="318" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+          <!-- step4 to destinations -->
+          <line x1="690" y1="350" x2="780" y2="150" stroke="var(--positive)" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrowGreen)"/>
+          <line x1="690" y1="370" x2="780" y2="350" stroke="var(--positive)" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrowGreen)"/>
+          <!-- trigger to step1 -->
+          <line x1="280" y1="135" x2="280" y2="208" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+        </svg>
+
+        <div class="arch-legend">
+          <span class="arch-legend-item"><span class="arch-legend-dot" style="background:var(--accent)"></span>data flow</span>
+          <span class="arch-legend-item"><span class="arch-legend-dot" style="background:var(--positive)"></span>publish to Notion</span>
+          <span class="arch-legend-item"><span class="arch-legend-dot" style="background:var(--accent-secondary)"></span>backup to GitHub</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 Steps -->
+    <section id="steps" data-reveal>
+      <h2><span class="num">02</span> The 5 stages, expanded</h2>
+      <p class="section-lead">Click any stage to see what's actually happening, what tools are involved, and what can fail. The whole pipeline runs sequentially in roughly 5 minutes.</p>
+
+      <div class="steps">
+        <details class="step" name="stages" open>
+          <summary>
+            <span class="step-badge">01</span>
+            <div class="step-meta">
+              <h3>Trigger</h3>
+              <p>The cloud server wakes up at 7:00 AM EDT</p>
+            </div>
+            <span class="step-time">~1s</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="step-body">
+            <div class="step-body-grid">
+              <div class="step-detail-card">
+                <h4>What happens</h4>
+                <ul>
+                  <li>GitHub's cron scheduler fires at 11:00 UTC</li>
+                  <li>A fresh Ubuntu virtual machine spins up</li>
+                  <li>Latest code is checked out from main branch</li>
+                  <li>Node.js, yt-dlp, Claude CLI install</li>
+                </ul>
+              </div>
+              <div class="step-detail-card">
+                <h4>Tools used</h4>
+                <div class="step-tools">
+                  <span class="tool-tag">GitHub Actions</span>
+                  <span class="tool-tag">cron: '0 11 * * *'</span>
+                  <span class="tool-tag">ubuntu-latest</span>
+                  <span class="tool-tag">Node 22</span>
+                </div>
+                <h4 style="margin-top:20px">If it fails</h4>
+                <ul>
+                  <li>GitHub sends you an email automatically</li>
+                  <li>Re-run from Actions tab manually</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="step" name="stages">
+          <summary>
+            <span class="step-badge">02</span>
+            <div class="step-meta">
+              <h3>Collect videos</h3>
+              <p>Visit each channel, find yesterday's uploads, fetch metadata</p>
+            </div>
+            <span class="step-time">~2 min</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="step-body">
+            <div class="step-body-grid">
+              <div class="step-detail-card">
+                <h4>What happens</h4>
+                <ul>
+                  <li>Read your channels.txt list</li>
+                  <li>For each channel: ask YouTube for last 10 video metadata</li>
+                  <li>Filter to videos uploaded yesterday (in your timezone)</li>
+                  <li>Download captions/transcripts when available</li>
+                  <li>Save raw data as JSON to a temp file</li>
+                </ul>
+              </div>
+              <div class="step-detail-card">
+                <h4>Tools used</h4>
+                <div class="step-tools">
+                  <span class="tool-tag">yt-dlp</span>
+                  <span class="tool-tag">YouTube cookies</span>
+                  <span class="tool-tag">collect.js</span>
+                </div>
+                <h4 style="margin-top:20px">Why cookies?</h4>
+                <ul>
+                  <li>Cloud servers get blocked by YouTube</li>
+                  <li>Your logged-in cookies bypass the block</li>
+                  <li>Stored encrypted as GitHub Secret</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="step" name="stages">
+          <summary>
+            <span class="step-badge">03</span>
+            <div class="step-meta">
+              <h3>Summarize with AI</h3>
+              <p>Claude reads each video and writes a structured summary</p>
+            </div>
+            <span class="step-time">~1.5 min</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="step-body">
+            <div class="step-body-grid">
+              <div class="step-detail-card">
+                <h4>What happens</h4>
+                <ul>
+                  <li>Claude CLI starts in headless mode</li>
+                  <li>Reads the raw JSON file from step 2</li>
+                  <li>For each video: writes Key Summary + Timeline + Insight</li>
+                  <li>Groups summaries under red channel headers</li>
+                  <li>Saves as a markdown file in tmp/</li>
+                </ul>
+              </div>
+              <div class="step-detail-card">
+                <h4>Tools used</h4>
+                <div class="step-tools">
+                  <span class="tool-tag">Claude Code CLI</span>
+                  <span class="tool-tag">--print mode</span>
+                  <span class="tool-tag">claude-haiku-4-5</span>
+                  <span class="tool-tag">OAuth token</span>
+                </div>
+                <h4 style="margin-top:20px">Why Haiku?</h4>
+                <ul>
+                  <li>2-3× faster than Sonnet</li>
+                  <li>Uses less of your subscription quota</li>
+                  <li>Quality is great for short summaries</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="step" name="stages">
+          <summary>
+            <span class="step-badge">04</span>
+            <div class="step-meta">
+              <h3>Quality check</h3>
+              <p>Validate every summary follows the right format</p>
+            </div>
+            <span class="step-time">~1s</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="step-body">
+            <div class="step-body-grid">
+              <div class="step-detail-card">
+                <h4>What happens</h4>
+                <ul>
+                  <li>Read the summaries markdown file</li>
+                  <li>Check every video has Key Summary + one-line Insight</li>
+                  <li>Verify timestamp format (HH:MM:SS)</li>
+                  <li>Check at least one channel section exists</li>
+                  <li>Auto-fix small format issues; warn on bigger ones</li>
+                </ul>
+              </div>
+              <div class="step-detail-card">
+                <h4>Tools used</h4>
+                <div class="step-tools">
+                  <span class="tool-tag">review.js</span>
+                  <span class="tool-tag">regex validators</span>
+                  <span class="tool-tag">pure Node.js</span>
+                </div>
+                <h4 style="margin-top:20px">Why this exists</h4>
+                <ul>
+                  <li>AI sometimes drops a section header</li>
+                  <li>Catches issues before publishing</li>
+                  <li>Prevents broken pages in Notion</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="step" name="stages">
+          <summary>
+            <span class="step-badge">05</span>
+            <div class="step-meta">
+              <h3>Publish + commit</h3>
+              <p>Create Notion page, save backup to GitHub repo</p>
+            </div>
+            <span class="step-time">~5s</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="step-body">
+            <div class="step-body-grid">
+              <div class="step-detail-card">
+                <h4>What happens</h4>
+                <ul>
+                  <li>Convert markdown to Notion blocks (h1/h2/h3, lists, quotes)</li>
+                  <li>Create child page under "News Digest" parent</li>
+                  <li>POST blocks via Notion API (batched 100 at a time)</li>
+                  <li>Apply red color to channel headers</li>
+                  <li>Save same content to output/YYYY-MM-DD.md</li>
+                  <li>Commit and push to GitHub for archive</li>
+                </ul>
+              </div>
+              <div class="step-detail-card">
+                <h4>Tools used</h4>
+                <div class="step-tools">
+                  <span class="tool-tag">publish.js</span>
+                  <span class="tool-tag">Notion API v1</span>
+                  <span class="tool-tag">git commit</span>
+                </div>
+                <h4 style="margin-top:20px">Result</h4>
+                <ul>
+                  <li>Notion page visible at 7:05 AM</li>
+                  <li>You wake up, open Notion, read</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- 03 Timing -->
+    <section id="timing" data-reveal>
+      <h2><span class="num">03</span> Where the time goes</h2>
+      <p class="section-lead">A typical run takes 4–7 minutes total. Here's how it breaks down by stage, based on actual production runs from this project.</p>
+
+      <div class="chart-container">
+        <canvas id="timingChart" role="img" aria-label="Horizontal bar chart showing time spent per pipeline stage: Setup 5s, Collect 110s, Summarize 90s, Review 1s, Publish 5s, Commit 1s"></canvas>
+      </div>
+
+      <div class="chart-meta">
+        <span><strong>Total typical runtime:</strong> 3 min 32 sec</span>
+        <span><strong>Bottleneck:</strong> Collect (yt-dlp throttling)</span>
+        <span><strong>AI overhead:</strong> Only 42% of total time</span>
+      </div>
+    </section>
+
+    <!-- 04 Data flow -->
+    <section id="dataflow" data-reveal>
+      <h2><span class="num">04</span> What the data looks like at each stage</h2>
+      <p class="section-lead">The same video, transformed step by step. Real example from a recent run.</p>
+
+      <div class="data-flow">
+        <div class="stage">
+          <div class="stage-header">
+            <span class="stage-num">A</span>
+            <span class="stage-title">After collect — raw JSON</span>
+            <span class="stage-arrow">tmp/raw-2026-05-02.json</span>
+          </div>
+<pre><span class="key">{</span>
+  <span class="key">"channel"</span>: <span class="string">"@aiDotEngineer"</span>,
+  <span class="key">"channelName"</span>: <span class="string">"AI Engineer"</span>,
+  <span class="key">"videoId"</span>: <span class="string">"WE_Gnowy3uw"</span>,
+  <span class="key">"title"</span>: <span class="string">"Replacing 12K LoC with a 200 LoC Skill"</span>,
+  <span class="key">"uploadDate"</span>: <span class="string">"2026-05-01"</span>,
+  <span class="key">"duration"</span>: <span class="string">1162</span>,
+  <span class="key">"hasTranscript"</span>: <span class="string">false</span>,
+  <span class="key">"description"</span>: <span class="string">"David Gomes shows how Cursor replaced..."</span>
+<span class="key">}</span></pre>
+        </div>
+
+        <div class="stage">
+          <div class="stage-header">
+            <span class="stage-num">B</span>
+            <span class="stage-title">After summarize — markdown</span>
+            <span class="stage-arrow">tmp/summaries-2026-05-02.md</span>
+          </div>
+<pre><span class="comment">### 📺 [AI Engineer](https://www.youtube.com/@aiDotEngineer)</span>
+
+<span class="comment">## [Replacing 12K LoC with a 200 LoC Skill]</span>(<span class="string">https://www.youtube.com/watch?v=WE_Gnowy3uw</span>)
+
+<span class="key">**Insight**</span>
+💡 Markdown-driven workflows are validated — most internal tools are over-engineered.
+
+<span class="key">**Key Summary**</span>
+Cursor rewrote its heavy Git WorkTrees feature using a Skills + slash-command + sub-agent structure — replacing roughly 15,000 lines of TypeScript with about 200 lines of plain markdown.
+
+In the demo they handle the same stale-lock edge case in 80 lines of TS vs. one instruction line plus a tool call in markdown, then walk through one case where the prose version actually performs worse so the trade-off is honest.
+
+<span class="key">**Key Timeline**</span>
+- [<span class="string">00:02:10</span>](<span class="string">https://www.youtube.com/watch?v=WE_Gnowy3uw&t=130</span>) The original 12K-line implementation
+- [<span class="string">00:06:40</span>](<span class="string">https://www.youtube.com/watch?v=WE_Gnowy3uw&t=400</span>) Rewriting it as a markdown skill
+- [<span class="string">00:13:25</span>](<span class="string">https://www.youtube.com/watch?v=WE_Gnowy3uw&t=805</span>) Edge cases the markdown version handles worse</pre>
+        </div>
+
+        <div class="stage">
+          <div class="stage-header">
+            <span class="stage-num">C</span>
+            <span class="stage-title">After publish — Notion blocks</span>
+            <span class="stage-arrow">api.notion.com/v1/pages</span>
+          </div>
+<pre><span class="key">[</span>
+  <span class="key">{</span>
+    <span class="key">"type"</span>: <span class="string">"heading_3"</span>,
+    <span class="key">"heading_3"</span>: <span class="key">{</span>
+      <span class="key">"rich_text"</span>: [<span class="key">{</span> <span class="key">"text"</span>: <span class="key">{</span> <span class="key">"content"</span>: <span class="string">"📺 AI Engineer"</span> <span class="key">}</span> <span class="key">}</span>],
+      <span class="key">"color"</span>: <span class="string">"red"</span>
+    <span class="key">}</span>
+  <span class="key">}</span>,
+  <span class="key">{</span>
+    <span class="key">"type"</span>: <span class="string">"heading_2"</span>,
+    <span class="key">"heading_2"</span>: <span class="key">{</span>
+      <span class="key">"rich_text"</span>: [<span class="key">{</span>
+        <span class="key">"text"</span>: <span class="key">{</span>
+          <span class="key">"content"</span>: <span class="string">"Replacing 12K LoC with a 200 LoC Skill"</span>,
+          <span class="key">"link"</span>: <span class="key">{</span> <span class="key">"url"</span>: <span class="string">"https://youtube.com/..."</span> <span class="key">}</span>
+        <span class="key">}</span>
+      <span class="key">}</span>]
+    <span class="key">}</span>
+  <span class="key">}</span>
+<span class="key">]</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 Failures -->
+    <section id="failures" data-reveal>
+      <h2><span class="num">05</span> When things go wrong</h2>
+      <p class="section-lead">Every step has a failure mode. The system is designed to fail loudly and recover gracefully — most issues self-resolve on the next run.</p>
+
+      <div class="failure-grid">
+        <article class="failure-card">
+          <div class="failure-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+          </div>
+          <h3>YouTube blocks the request</h3>
+          <p>YouTube's bot detection sometimes refuses to give metadata to cloud IPs, even with cookies. Your cookie file expired, perhaps.</p>
+          <p class="recovery"><strong>Recovery:</strong> Re-export YouTube cookies (~60 days), update GitHub secret. Pipeline picks up next run.</p>
+        </article>
+
+        <article class="failure-card">
+          <div class="failure-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <h3>Claude rate limit hit</h3>
+          <p>If you used Claude heavily today, the workflow shares your 5-hour rolling quota. The pipeline returns "You've hit your limit · resets at X PM UTC".</p>
+          <p class="recovery"><strong>Recovery:</strong> Auto-retry next morning with fresh quota. Or wait for reset and trigger manually.</p>
+        </article>
+
+        <article class="failure-card">
+          <div class="failure-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          </div>
+          <h3>Git push race condition</h3>
+          <p>If GitHub's repo updated between checkout and push, the final commit step rejects with "fetch first".</p>
+          <p class="recovery"><strong>Recovery:</strong> Built-in retry — pipeline pulls latest, rebases, pushes again. Up to 3 retries.</p>
+        </article>
+
+        <article class="failure-card">
+          <div class="failure-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <h3>Notion permission revoked</h3>
+          <p>If you removed the integration from your parent Notion page, the publish step returns 404.</p>
+          <p class="recovery"><strong>Recovery:</strong> Re-add integration in Notion (·· menu → Connections). Backup still saves to GitHub.</p>
+        </article>
+
+        <article class="failure-card">
+          <div class="failure-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h3>Zero videos uploaded</h3>
+          <p>Some days no channels post anything. The pipeline still runs successfully but produces an empty digest with a friendly message.</p>
+          <p class="recovery"><strong>Recovery:</strong> Not a failure — just a quiet day. An empty Notion page is created with a "No videos collected" notice.</p>
+        </article>
+
+        <article class="failure-card">
+          <div class="failure-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+          </div>
+          <h3>Format spec drift</h3>
+          <p>You edited config/format.md but Claude wrote summaries in old format. Validation flags it as a warning.</p>
+          <p class="recovery"><strong>Recovery:</strong> Pipeline still publishes — warnings don't block. Future runs follow new format automatically.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- 06 Schedule -->
+    <section id="schedule" data-reveal>
+      <h2><span class="num">06</span> The 24-hour cycle</h2>
+      <p class="section-lead">Once a day, a few minutes of work. The rest of the time the system is dormant.</p>
+
+      <div class="clock-section">
+        <div class="clock">
+          <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" aria-label="24-hour clock showing the daily run at 7 AM EDT">
+            <!-- outer ring -->
+            <circle cx="110" cy="110" r="100" fill="none" stroke="var(--border)" stroke-width="2"/>
+            <!-- 24 hour ticks -->
+            <g stroke="var(--text-secondary)" stroke-width="1">
+              <line x1="110" y1="10" x2="110" y2="20"/>
+              <line x1="110" y1="200" x2="110" y2="210"/>
+              <line x1="10" y1="110" x2="20" y2="110"/>
+              <line x1="200" y1="110" x2="210" y2="110"/>
+            </g>
+            <!-- hour labels -->
+            <g fill="var(--text-secondary)" font-family="JetBrains Mono" font-size="10" text-anchor="middle">
+              <text x="110" y="34">00</text>
+              <text x="186" y="114">06</text>
+              <text x="110" y="200">12</text>
+              <text x="34" y="114">18</text>
+            </g>
+            <!-- 7 AM marker (active arc, 7am = 105°) -->
+            <g transform="rotate(105 110 110)">
+              <circle cx="110" cy="20" r="14" fill="var(--accent)"/>
+              <text x="110" y="24" text-anchor="middle" fill="white" font-size="9" font-family="JetBrains Mono" font-weight="700" transform="rotate(-105 110 24)">7AM</text>
+            </g>
+            <!-- center -->
+            <circle cx="110" cy="110" r="50" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="110" y="105" text-anchor="middle" fill="var(--text)" font-family="Inter" font-weight="700" font-size="14">DAILY</text>
+            <text x="110" y="122" text-anchor="middle" fill="var(--text-secondary)" font-family="Inter" font-size="11">at 07:00 EDT</text>
+          </svg>
+        </div>
+
+        <h3 style="margin-bottom:8px">One trigger. Five minutes of work. 23h 55min of standby.</h3>
+        <p style="color:var(--text-secondary); margin: 0 auto; max-width: 540px;">The system sleeps until 7 AM EDT. Then it runs the full pipeline (collect → summarize → review → publish), commits the result, and goes back to sleep until tomorrow.</p>
+
+        <div class="clock-stats">
+          <div class="clock-stat">
+            <div class="clock-stat-value">07:00</div>
+            <div class="clock-stat-label">Trigger time</div>
+          </div>
+          <div class="clock-stat">
+            <div class="clock-stat-value">~5m</div>
+            <div class="clock-stat-label">Active runtime</div>
+          </div>
+          <div class="clock-stat">
+            <div class="clock-stat-value">365</div>
+            <div class="clock-stat-label">Runs per year</div>
+          </div>
+          <div class="clock-stat">
+            <div class="clock-stat-value">$0</div>
+            <div class="clock-stat-label">Marginal cost</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script>
+  // Top-level vars only
+  var chartsBuilt = false;
+  var initialTheme = (function() {
+    var stored = null;
+    try { stored = localStorage.getItem('viz-theme'); } catch (e) {}
+    if (stored === 'theme-light' || stored === 'theme-dark') return stored;
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return prefersDark ? 'theme-dark' : 'theme-light';
+  })();
+
+  function applyTheme(t) {
+    document.documentElement.className = t;
+    document.body.className = t;
+    try { localStorage.setItem('viz-theme', t); } catch (e) {}
+    onThemeChange();
+  }
+
+  function cycleTheme() {
+    var current = document.documentElement.className.indexOf('theme-dark') !== -1 ? 'theme-dark' : 'theme-light';
+    applyTheme(current === 'theme-dark' ? 'theme-light' : 'theme-dark');
+  }
+
+  function toggleMenu() {
+    var dd = document.getElementById('vizMenuDropdown');
+    if (dd) dd.classList.toggle('open');
+  }
+
+  function downloadImage() {
+    if (typeof htmlToImage === 'undefined') return;
+    var node = document.getElementById('main-content');
+    htmlToImage.toPng(node, { backgroundColor: getComputedStyle(document.body).backgroundColor })
+      .then(function(dataUrl) {
+        var link = document.createElement('a');
+        link.download = 'how-it-works.png';
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch(function(e) { console.error('PNG export failed:', e); });
+  }
+
+  document.addEventListener('click', function(e) {
+    var dd = document.getElementById('vizMenuDropdown');
+    if (!e.target.closest('.viz-menu') && dd) dd.classList.remove('open');
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var dd = document.getElementById('vizMenuDropdown');
+      if (dd) dd.classList.remove('open');
+    }
+  });
+
+  function getCssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function buildCharts() {
+    if (typeof Chart === 'undefined') {
+      console.error('Chart.js not loaded');
+      return;
+    }
+
+    var canvas = document.getElementById('timingChart');
+    if (!canvas) return;
+
+    // Destroy existing chart
+    if (window.timingChartInstance) {
+      try { window.timingChartInstance.destroy(); } catch (e) {}
+    }
+
+    // Reset canvas (ensures clean state on theme switch)
+    var parent = canvas.parentNode;
+    var newCanvas = document.createElement('canvas');
+    newCanvas.id = 'timingChart';
+    newCanvas.setAttribute('role', 'img');
+    newCanvas.setAttribute('aria-label', 'Horizontal bar chart showing time spent per pipeline stage');
+    parent.replaceChild(newCanvas, canvas);
+
+    var textColor = getCssVar('--text');
+    var textSecondary = getCssVar('--text-secondary');
+    var accent = getCssVar('--accent');
+    var accentSecondary = getCssVar('--accent-secondary');
+    var border = getCssVar('--border');
+
+    try {
+      window.timingChartInstance = new Chart(newCanvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: ['Setup runner', 'Collect videos', 'Summarize (AI)', 'Review', 'Publish to Notion', 'Commit + push'],
+          datasets: [{
+            label: 'Seconds',
+            data: [25, 110, 90, 1, 5, 1],
+            backgroundColor: [
+              'rgba(124,92,255,0.4)',
+              'rgba(124,92,255,0.85)',
+              'rgba(0,212,170,0.85)',
+              'rgba(124,92,255,0.4)',
+              'rgba(0,212,170,0.85)',
+              'rgba(124,92,255,0.4)'
+            ],
+            borderColor: 'transparent',
+            borderRadius: 6,
+            borderWidth: 0
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              enabled: true,
+              padding: 12,
+              cornerRadius: 8,
+              titleFont: { size: 14, family: 'Inter', weight: '600' },
+              bodyFont: { size: 13, family: 'Inter' },
+              callbacks: {
+                label: function(ctx) { return ctx.parsed.x + ' seconds'; }
+              }
+            }
+          },
+          layout: {
+            padding: { top: 10, right: 30, bottom: 10, left: 10 }
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: textSecondary,
+                font: { family: 'JetBrains Mono', size: 12 },
+                callback: function(v) { return v + 's'; }
+              },
+              grid: { color: border },
+              beginAtZero: true
+            },
+            y: {
+              ticks: {
+                color: textColor,
+                font: { family: 'Inter', size: 13, weight: '500' }
+              },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+      chartsBuilt = true;
+    } catch (err) {
+      console.error('Chart creation failed:', err);
+    }
+  }
+
+  function onThemeChange() {
+    if (chartsBuilt) {
+      chartsBuilt = false;
+      setTimeout(buildCharts, 50);
+    }
+  }
+
+  // Reveal on scroll
+  function setupReveal() {
+    var els = document.querySelectorAll('[data-reveal]');
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function(el) { el.classList.add('revealed'); });
+      return;
+    }
+    var obs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          obs.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    els.forEach(function(el) { obs.observe(el); });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    applyTheme(initialTheme);
+    setupReveal();
+    buildCharts();
+  });
+</script>
+
+</body>
+</html>

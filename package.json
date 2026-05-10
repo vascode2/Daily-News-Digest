@@ -1,0 +1,14 @@
+{
+  "name": "daily-news-digest",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Daily Korean news and economy YouTube digest generator using Claude Code (no API key required)",
+  "scripts": {
+    "collect": "node --env-file-if-exists=.env scripts/collect.js",
+    "collect:week": "node --env-file-if-exists=.env scripts/collect.js --days 7 --max-per-channel 3",
+    "collect:channel": "node --env-file-if-exists=.env scripts/collect.js --channel",
+    "review": "node --env-file-if-exists=.env scripts/review.js",
+    "publish": "node --env-file-if-exists=.env scripts/publish.js",
+    "test": "node tests/test-pipeline.js"
+  }
+}
