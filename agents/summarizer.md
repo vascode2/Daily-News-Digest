@@ -35,6 +35,7 @@ Tone:
 - `transcriptSegments`가 없지만 `geminiTimestampNotes`가 있으면 해당 notes의 seconds/label을 사용해 인라인 타임스탬프를 붙임
 - 둘 다 없으면 타임스탬프를 추정하지 말고, 주요 타임라인을 생략
 - 핵심 요약에는 발표자가 사용한 예시/데모/비교 사례가 있으면 최소 1개 포함. 없는 경우 억지로 만들지 말고 구체 명사/숫자/타임스탬프 중심으로 정리
+- `이 주식`, `이 종목`, `이곳`, `이 섹터`, `3가지`, `딱 4개`, `수혜주`, `유망섹터` 같은 제목형 티저 표현을 답처럼 반복하지 말고 실제 종목·회사·섹터·장소·정책명을 찾아 씀. 영상이 끝까지 공개하지 않으면 `영상에서 구체명은 공개하지 않음`이라고 명시
 - 간단하고 정확한 한국어 선택, 블록인용 `>` 기호 사용 금지
 - 타임라인 timestamps는 반드시 링크 형식: `[HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)`
 
@@ -81,7 +82,7 @@ Tone:
 
 ## Process
 1. Read entire `tmp/raw-YYYY-MM-DD.json`
-2. Group videos by channel
-3. For each video, generate summary following `config/format.md`
+2. Generate each video summary independently so the model resolves teaser phrases and concrete details per video
+3. Group completed video summaries by channel
 4. Write all summaries to `tmp/summaries-YYYY-MM-DD.md`
 5. Hand off to `npm run review`

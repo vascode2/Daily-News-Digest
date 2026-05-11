@@ -136,6 +136,17 @@ for (const block of videoBlocks) {
     console.log(`  ⚠️  WARNING: "${title}" — 핵심 요약에 명시적 사례/데모 단어가 없음`);
   }
 
+  if (/(?:'|"|‘|“)?(이 주식|이 종목|이곳|이 섹터)(?:'|"|’|”)?/.test(normalizedSummary) && !/영상에서 구체명은 공개하지 않음/.test(normalizedSummary)) {
+    issues.push({
+      level: 'ERROR',
+      video: title,
+      check: 'teaser_placeholder',
+      detail: '핵심 요약 must resolve teaser placeholders like 이 주식/이 종목/이곳/이 섹터 to the actual named stock, company, sector, or place; if unrevealed, say 영상에서 구체명은 공개하지 않음'
+    });
+    errorCount++;
+    console.log(`  ❌ ERROR: "${title}" — 핵심 요약에 해소되지 않은 티저 표현이 남음`);
+  }
+
   // Forbid 핵심 요약 from echoing the video title in its first paragraph.
   // Title is already shown in the h2 above; restating it wastes the slot.
   const firstPara = summaryParagraphs[0] || '';

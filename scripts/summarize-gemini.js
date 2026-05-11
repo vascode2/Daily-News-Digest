@@ -43,32 +43,44 @@ const title = isChannel ? `# Channel News Digest — ${key}` : `# News Digest �
 console.log(`Summarizing ${path.basename(rawFile)} with Gemini model preference: ${modelsToTry.join(' -> ')}`);
 
 const enrichedRawItems = await enrichWithGeminiVideoTimestamps(rawItems);
-const promptRawJson = JSON.stringify(enrichedRawItems, null, 2);
+const videoSummaries = [];
 
-const prompt = `You are writing a Korean morning news digest from collected YouTube transcript JSON.
+for (let i = 0; i < enrichedRawItems.length; i++) {
+  const video = enrichedRawItems[i];
+  console.log(`Summarizing video ${i + 1}/${enrichedRawItems.length}: ${video.title || video.videoId}`);
+  const summary = await summarizeVideo(video, i + 1, enrichedRawItems.length);
+  videoSummaries.push({ video, summary });
+}
 
-SOURCE OF TRUTH: Follow config/format.md and agents/summarizer.md exactly. The review script will reject malformed output.
+const markdown = assembleDigest(title, videoSummaries);
 
-Output destination: tmp/summaries-${key}.md
-First line must be exactly: ${title}
+fs.writeFileSync(outputFile, markdown.endsWith('\n') ? markdown : `${markdown}\n`);
+console.log(`Saved: ${outputFile}`);
 
-Hard requirements:
-- Write Korean summaries, even if a video title or transcript is English.
-- Video h2 display titles MUST be Korean. If a raw title is English or YouTube auto-translated English, translate it back into natural Korean based on the raw title and transcript context. Preserve proper nouns like GTX, AI, Fed, USDT, company names, and guest names.
-- Group videos by channel under channel h3 headings: ### 📺 [ChannelName](https://www.youtube.com/@CHANNEL_HANDLE)
-- Each video title must be h2 with a Korean clickable YouTube link: ## [한국어 제목](https://www.youtube.com/watch?v=VIDEO_ID)
-- Section order per video: 한 줄 인사이트 → 핵심 요약 → optional 주요 타임라인.
-- Prefer omitting 주요 타임라인 when 핵심 요약 already has 3+ inline timestamp links.
-- For every video object, inspect transcriptSegments before writing.
-- If transcriptSegments has 3+ entries, 핵심 요약 MUST contain at least 3 inline timestamp links using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS). Put them inside the numbered bullet body.
-- Do NOT write [자막 기반 타임라인 없음] for any video with transcriptSegments.
-- If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use geminiTimestampNotes to add at least 3 inline timestamp links in 핵심 요약. Use the exact seconds and labels from those notes.
-- If both transcriptSegments and geminiTimestampNotes are empty, do not invent timestamps; omit 주요 타임라인.
-- 핵심 요약 = intro 1-2 sentences + 3-5 numbered points with bold sub-headings. Each point has 1-3 sub-bullets containing concrete names/companies/numbers/years from the transcript.
-- No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to the video.
-- Do NOT include upload dates, view counts, duration, or transcript indicators.
-- Put --- between videos.
-- Return markdown only. Do not wrap in a code fence. Do not explain your process.
+async function summarizeVideo(video, index, total) {
+  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+  const prompt = `You are writing one Korean YouTube video summary for a morning news digest.
+
+This is video ${index} of ${total}. Focus only on this video. Do not summarize other videos.
+
+Output requirements:
+- Return markdown only. No code fence. No explanations.
+- Start with exactly one h2 video heading: ## [한국어 영상 제목](${videoUrl})
+- Do NOT include a digest title, channel heading, upload date, view count, duration, or transcript indicator.
+- Section order: **한 줄 인사이트** → **핵심 요약** → optional **주요 타임라인**.
+- 핵심 요약 = intro 1-2 sentences + 3-5 numbered points with bold sub-headings. Each point has 1-3 sub-bullets.
+- Use concrete names/companies/stocks/sectors/numbers/years from the transcript, description, or geminiTimestampNotes.
+- If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS).
+- If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use those notes for at least 3 inline timestamp links.
+- If both transcriptSegments and geminiTimestampNotes are empty, do not invent timestamps and omit 주요 타임라인.
+- No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
+
+Teaser-resolution requirements, very important:
+- Korean finance/news titles often hide the answer behind teaser phrases such as "이 주식", "이 종목", "이곳", "이 섹터", "3가지", "딱 4개", "수혜주", "유망섹터".
+- In the summary, never use those teaser phrases as if they were the answer.
+- Resolve the actual named stock, company, sector, place, policy, number, or example from the transcript/description/geminiTimestampNotes.
+- For stock recommendations, name the actual company/ticker/sector when the speaker names it. Separate direct speaker claims from your inference.
+- If the video never reveals the specific name, write "영상에서 구체명은 공개하지 않음" instead of repeating the teaser.
 
 config/format.md:
 ${format}
@@ -76,19 +88,48 @@ ${format}
 agents/summarizer.md:
 ${guidance}
 
-raw JSON:
-${promptRawJson}`;
+video JSON:
+${JSON.stringify(video, null, 2)}`;
 
-const response = await callGeminiWithFallback(prompt);
-const markdown = cleanMarkdown(extractText(response));
-
-if (!markdown.startsWith(title)) {
-  console.error(`Gemini output did not start with required title: ${title}`);
-  process.exit(1);
+  const response = await callGeminiWithFallback(prompt);
+  return normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
 }
 
-fs.writeFileSync(outputFile, markdown.endsWith('\n') ? markdown : `${markdown}\n`);
-console.log(`Saved: ${outputFile}`);
+function normalizeVideoMarkdown(markdown, video) {
+  let cleaned = markdown
+    .replace(/^#\s+[^\n]*\n+/, '')
+    .replace(/^###\s+📺[^\n]*\n+/m, '')
+    .replace(/\n---\s*$/g, '')
+    .trim();
+
+  if (!/^##\s+\[[^\]]+\]\(https:\/\/www\.youtube\.com\/watch\?v=/m.test(cleaned)) {
+    const fallbackTitle = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
+    cleaned = `## [${fallbackTitle}](https://www.youtube.com/watch?v=${video.videoId})\n\n${cleaned}`;
+  }
+
+  return cleaned;
+}
+
+function assembleDigest(digestTitle, entries) {
+  const lines = [digestTitle, ''];
+  let currentChannelKey = '';
+
+  for (const { video, summary } of entries) {
+    const handle = String(video.channel || '').startsWith('@') ? video.channel : `@${video.channel || ''}`;
+    const channelKey = handle || video.channelName || 'unknown';
+    if (channelKey !== currentChannelKey) {
+      if (currentChannelKey) lines.push('---', '');
+      lines.push(`### 📺 [${video.channelName || handle || 'Unknown Channel'}](https://www.youtube.com/${handle})`, '');
+      currentChannelKey = channelKey;
+    } else {
+      lines.push('---', '');
+    }
+
+    lines.push(summary.trim(), '');
+  }
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 
 function findLatestRaw(dir) {
   if (!fs.existsSync(dir)) return null;
