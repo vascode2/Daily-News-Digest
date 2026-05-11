@@ -66,6 +66,7 @@ This is video ${index} of ${total}. Focus only on this video. Do not summarize o
 Output requirements:
 - Return markdown only. No code fence. No explanations.
 - Start with exactly one h2 video heading: ## [한국어 영상 제목](${videoUrl})
+- The first sentence after **핵심 요약** must NOT restate the video title. Start with the speaker, issue, claim, or data point instead.
 - Do NOT include a digest title, channel heading, upload date, view count, duration, or transcript indicator.
 - Section order: **한 줄 인사이트** → **핵심 요약** → optional **주요 타임라인**.
 - 핵심 요약 = intro 1-2 sentences + 3-5 numbered points with bold sub-headings. Each point has 1-3 sub-bullets.
@@ -76,7 +77,7 @@ Output requirements:
 - No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
 
 Teaser-resolution requirements, very important:
-- Korean finance/news titles often hide the answer behind teaser phrases such as "이 주식", "이 종목", "이곳", "이 섹터", "3가지", "딱 4개", "수혜주", "유망섹터".
+- Korean finance/news titles often hide the answer behind teaser phrases such as "이 주식", "이 종목", "이 섹터", "3가지", "딱 4개", "수혜주", "유망섹터".
 - In the summary, never use those teaser phrases as if they were the answer.
 - Resolve the actual named stock, company, sector, place, policy, number, or example from the transcript/description/geminiTimestampNotes.
 - For stock recommendations, name the actual company/ticker/sector when the speaker names it. Separate direct speaker claims from your inference.
