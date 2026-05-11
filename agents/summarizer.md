@@ -30,8 +30,8 @@ Tone:
 - English channels (e.g., @careerhackeralex, @aiDotEngineer) → **Korean summary** (translate to Korean)
 - 핵심 요약 = 도입 1~2문장 + **번호 매긴 3~5개 굵은 소제목** + 각 소제목 아래 1~3개 sub-bullet (자세한 골격은 `config/format.md` 참고)
 - sub-bullet에는 자막에서 인용한 **구체적 인명·기업명·숫자·연도**를 넣고, 끝에 **인라인 타임스탬프** `[[HH:MM](youtube_url&t=SECONDS)]`를 붙임
-- `transcriptSegments`가 있으면 첨부 예시처럼 핵심 요약 bullet마다 링크 타임스탬프를 붙이고, 한 영상당 최소 3개 이상 포함
-- `transcriptSegments`가 없으면 타임스탬프를 추정하지 말고 `[자막 기반 타임라인 없음]`을 1회 명시
+- `transcriptSegments`가 있으면 첨부 예시처럼 핵심 요약 bullet마다 링크 타임스탬프를 붙이고, 한 영상당 최소 3개 이상 포함. 이 경우 `[자막 기반 타임라인 없음]`을 절대 쓰지 않음
+- `transcriptSegments`가 없으면 타임스탬프를 추정하지 말고, 주요 타임라인을 생략
 - 핵심 요약에는 발표자가 사용한 예시/데모/비교 사례 최소 1개 포함
 - 간단하고 정확한 한국어 선택, 블록인용 `>` 기호 사용 금지
 - 타임라인 timestamps는 반드시 링크 형식: `[HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)`
@@ -69,7 +69,7 @@ Tone:
 - If transcript is empty/very short (< 200 chars), write: `> 내용 부족 — 요약 불가 (자막/설명 없음)`
 - Timestamps must be in `[HH:MM:SS]` format
 - 주요 타임라인은 raw JSON의 `transcriptSegments`가 있는 경우에만 작성
-- `transcriptSegments`가 없으면 주요 타임라인을 생략하고, 핵심 요약에 `[자막 기반 타임라인 없음]` 문구를 1회 명시
+- `transcriptSegments`가 없으면 주요 타임라인을 생략하고, 시간을 추정하지 않음
 - Insight (한 줄 인사이트) = exactly 1 sentence summarizing the video's most important claim/number/judgment. **No generic '실무 적용' boilerplate** — stay faithful to the video itself.
 - **인사이트는 영상마다 고유해야 함** — 같은 다이제스트 안의 다른 영상과 동일한 문장(또는 거의 같은 보일러플레이트) 금지
 - **핵심 요약 첫 문단을 영상 제목으로 시작하지 말 것** — 제목은 이미 h2 헤딩에 있음

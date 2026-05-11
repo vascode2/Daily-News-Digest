@@ -83,9 +83,10 @@ jobs:
             - First line: '# News Digest — <KEY>'
             - Channel header MUST be a hyperlink: '### 📺 [ChannelName](https://www.youtube.com/<channel-handle-from-raw>)' using the channelName field for display text and the channel handle for the URL.
             - Each video title MUST be h2 with clickable YouTube link: '## [Title](https://www.youtube.com/watch?v=VIDEO_ID)'.
-            - Section order per video: '한 줄 인사이트' → '핵심 요약' → '주요 타임라인'.
-            - 핵심 요약 = intro 1–2 sentences + **3–5 numbered points with bold sub-headings** (e.g., '1. **소제목**'), each with 1–3 sub-bullets containing concrete names/companies/numbers/years pulled from the transcript. End each sub-bullet (or the point itself) with an inline timestamp '[[HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)]'. NO blockquote '>' prefix. NO generic takeaway or '실무 적용' sentences — stay faithful to what the video actually said. The '주요 타임라인' section is OPTIONAL when 3+ inline timestamps already exist in the body — prefer to OMIT it.
-            - 주요 타임라인 lines MUST be hyperlinked: '- [HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS) description'. Only emit when transcriptSegments exist; never invent timestamps.
+            - Section order per video: '한 줄 인사이트' → '핵심 요약' → optional '주요 타임라인'. Prefer OMITTING '주요 타임라인' when 핵심 요약 already has 3+ inline timestamp links.
+            - For every video object, inspect transcriptSegments before writing. If transcriptSegments has 3+ entries, 핵심 요약 MUST contain at least 3 inline timestamp links using exact segment start times: '[[HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)]'. Put them inside the numbered bullet body. Do NOT write '[자막 기반 타임라인 없음]' for any video with transcriptSegments.
+            - 핵심 요약 = intro 1–2 sentences + **3–5 numbered points with bold sub-headings** (e.g., '1. **소제목**'), each with 1–3 sub-bullets containing concrete names/companies/numbers/years pulled from the transcript. End each sub-bullet (or the point itself) with an inline timestamp when transcriptSegments exist. NO blockquote '>' prefix. NO generic takeaway or '실무 적용' sentences — stay faithful to what the video actually said.
+            - 주요 타임라인 lines, if emitted, MUST be hyperlinked: '- [HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS) description'. Only emit when transcriptSegments exist; never invent timestamps.
             - DO NOT include upload dates, view counts, duration, or transcript indicators.
             - Separator '---' between videos.
 
@@ -94,7 +95,6 @@ jobs:
       - name: Review summaries
         if: steps.gate.outputs.should_run == 'true'
         id: review
-        continue-on-error: true
         run: npm run review
 
       - name: Publish to Notion + repo

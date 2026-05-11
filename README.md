@@ -29,7 +29,8 @@ Global filtering through [config/keywords.txt](config/keywords.txt) is still ava
 
 - Channel names, video titles, and transcript-based timestamps are clickable.
 - When transcript timing data is available, key summary bullets include inline timestamp links like `[[02:02](https://www.youtube.com/watch?v=VIDEO_ID&t=122)]`.
-- When a video has only a description and no transcript segments, the digest does not invent timestamps; it marks `[자막 기반 타임라인 없음]` once in the summary.
+- When transcript timing data is available, the main summary body must include at least 3 inline timestamp links. The separate `주요 타임라인` section is optional and usually omitted.
+- When a video has only a description and no transcript segments, the digest does not invent timestamps.
 
 ## Daily Automation
 

@@ -50,6 +50,17 @@ for (const block of videoBlocks) {
   const videoId = urlMatch ? urlMatch[2] : null;
   const raw = videoId ? rawByVideoId.get(videoId) : null;
 
+  if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && block.includes('[자막 기반 타임라인 없음]')) {
+    issues.push({
+      level: 'ERROR',
+      video: title,
+      check: 'timestamp_marker_conflict',
+      detail: 'Video has transcriptSegments, so 핵심 요약 must include inline timestamp links instead of [자막 기반 타임라인 없음]'
+    });
+    errorCount++;
+    console.log(`  ❌ ERROR: "${title}" — transcriptSegments 있음에도 [자막 기반 타임라인 없음] 사용`);
+  }
+
   for (const section of alwaysRequired) {
     if (!block.includes(section)) {
       issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section}` });
