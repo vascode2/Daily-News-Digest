@@ -68,9 +68,9 @@ Manual workflows are also available:
 
    | Name | Default |
    | --- | --- |
-   | `GEMINI_MODEL` | `gemini-3-fast` |
+   | `GEMINI_MODEL` | `gemini-3-fast` preferred; falls back automatically if unavailable |
 
-   If Google exposes the model under a different exact ID in your account, set `GEMINI_MODEL` to that ID.
+   If Google exposes the model under a different exact ID in your account, set `GEMINI_MODEL` to that ID. If the preferred model is unavailable, the script automatically tries `gemini-2.5-flash`, `gemini-2.0-flash`, then `gemini-1.5-flash`.
 
 3. In Notion, share the News Digest page with the same integration used by `NOTION_TOKEN`.
 

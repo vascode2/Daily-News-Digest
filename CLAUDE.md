@@ -68,7 +68,7 @@ Tell the user the output file path, channel/video counts, and any errors.
 NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
 NOTION_PAGE_ID=your_32_character_notion_page_id  # News Digest parent page
 GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-3-fast    # Optional override
+GEMINI_MODEL=gemini-3-fast    # Optional preferred model; script falls back if unavailable
 ```
 **No ANTHROPIC_API_KEY needed** — summarization runs through Gemini.
 

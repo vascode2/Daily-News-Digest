@@ -12,7 +12,12 @@ const ROOT = path.join(__dirname, '..');
 const tmpDir = path.join(ROOT, 'tmp');
 
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-const model = process.env.GEMINI_MODEL || 'gemini-3-fast';
+const requestedModel = process.env.GEMINI_MODEL || 'gemini-3-fast';
+const fallbackModels = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash')
+  .split(',')
+  .map(modelName => modelName.trim())
+  .filter(Boolean);
+const modelsToTry = [...new Set([requestedModel, ...fallbackModels])];
 
 if (!apiKey) {
   console.error('Missing GEMINI_API_KEY. Add it as a GitHub Actions secret or local environment variable.');
@@ -34,7 +39,7 @@ const guidance = fs.readFileSync(path.join(ROOT, 'agents', 'summarizer.md'), 'ut
 const isChannel = key.startsWith('channel-');
 const title = isChannel ? `# Channel News Digest — ${key}` : `# News Digest — ${key}`;
 
-console.log(`Summarizing ${path.basename(rawFile)} with Gemini model: ${model}`);
+console.log(`Summarizing ${path.basename(rawFile)} with Gemini model preference: ${modelsToTry.join(' -> ')}`);
 
 const prompt = `You are writing a Korean morning news digest from collected YouTube transcript JSON.
 
@@ -69,7 +74,7 @@ ${guidance}
 raw JSON:
 ${rawJson}`;
 
-const response = await callGemini(prompt);
+const response = await callGeminiWithFallback(prompt);
 const markdown = cleanMarkdown(extractText(response));
 
 if (!markdown.startsWith(title)) {
@@ -89,7 +94,26 @@ function findLatestRaw(dir) {
   return files.length ? path.join(dir, files[0].file) : null;
 }
 
-async function callGemini(text) {
+async function callGeminiWithFallback(text) {
+  const errors = [];
+
+  for (const model of modelsToTry) {
+    console.log(`Trying Gemini model: ${model}`);
+    try {
+      const response = await callGemini(model, text);
+      console.log(`Using Gemini model: ${model}`);
+      return response;
+    } catch (err) {
+      errors.push(`${model}: ${err.message}`);
+      if (!isMissingModelError(err)) throw err;
+      console.warn(`Model unavailable, trying fallback: ${model}`);
+    }
+  }
+
+  throw new Error(`No configured Gemini model worked. Tried: ${modelsToTry.join(', ')}\n${errors.join('\n')}`);
+}
+
+async function callGemini(model, text) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: 'POST',
@@ -110,9 +134,16 @@ async function callGemini(text) {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Gemini API failed (${res.status}): ${err.slice(0, 1200)}`);
+    const error = new Error(`Gemini API failed (${res.status}): ${err.slice(0, 1200)}`);
+    error.status = res.status;
+    error.body = err;
+    throw error;
   }
   return res.json();
+}
+
+function isMissingModelError(err) {
+  return err?.status === 404 || /not found|NOT_FOUND|not supported for generateContent/i.test(err?.body || err?.message || '');
 }
 
 function extractText(response) {
