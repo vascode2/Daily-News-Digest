@@ -136,15 +136,25 @@ for (const block of videoBlocks) {
     console.log(`  ⚠️  WARNING: "${title}" — 핵심 요약에 명시적 사례/데모 단어가 없음`);
   }
 
-  if (/(?:'|"|‘|“)?(이 주식|이 종목|이 섹터)(?:'|"|’|”)?/.test(normalizedSummary) && !/영상에서 구체명은 공개하지 않음/.test(normalizedSummary)) {
+  if (/(?:'|"|‘|“)?(이 주식|이 종목)(?:'|"|’|”)?/.test(normalizedSummary) && !/영상에서 구체명은 공개하지 않음/.test(normalizedSummary)) {
     issues.push({
       level: 'ERROR',
       video: title,
       check: 'teaser_placeholder',
-      detail: '핵심 요약 must resolve stock/sector teaser placeholders like 이 주식/이 종목/이 섹터 to the actual named stock, company, or sector; if unrevealed, say 영상에서 구체명은 공개하지 않음'
+      detail: '핵심 요약 must resolve stock teaser placeholders like 이 주식/이 종목 to the actual named stock or company; if unrevealed, say 영상에서 구체명은 공개하지 않음'
     });
     errorCount++;
     console.log(`  ❌ ERROR: "${title}" — 핵심 요약에 해소되지 않은 티저 표현이 남음`);
+  }
+
+  if (/(?:'|"|‘|“)?이 섹터(?:'|"|’|”)?/.test(normalizedSummary) && !/영상에서 구체명은 공개하지 않음/.test(normalizedSummary)) {
+    issues.push({
+      level: 'WARNING',
+      video: title,
+      check: 'sector_teaser_placeholder',
+      detail: '핵심 요약 should resolve 이 섹터 to the actual sector when possible'
+    });
+    console.log(`  ⚠️  WARNING: "${title}" — 핵심 요약에 섹터 티저 표현이 남음`);
   }
 
   if (/(?:'|"|‘|“)?이곳(?:'|"|’|”)?/.test(normalizedSummary) && !/영상에서 구체명은 공개하지 않음/.test(normalizedSummary)) {

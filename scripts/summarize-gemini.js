@@ -97,7 +97,24 @@ video JSON:
 ${JSON.stringify(video, null, 2)}`;
 
   const response = await callGeminiWithFallback(prompt);
-  return normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
+  let markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
+
+  if (hasResolvableTeaserPlaceholder(markdown)) {
+    console.log(`Retrying teaser resolution for: ${video.title || video.videoId}`);
+    const retryResponse = await callGeminiWithFallback(`${prompt}
+
+Previous markdown still contained unresolved teaser wording such as 이 주식, 이 종목, or 이 섹터:
+${markdown}
+
+Rewrite the same markdown, preserving the required format, but replace every unresolved teaser phrase with the actual named stock/company/sector from the video JSON. If the video never reveals it, write "영상에서 구체명은 공개하지 않음".`);
+    markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(retryResponse)), video);
+  }
+
+  return markdown;
+}
+
+function hasResolvableTeaserPlaceholder(markdown) {
+  return /(?:'|"|‘|“)?(이 주식|이 종목|이 섹터)(?:'|"|’|”)?/.test(markdown) && !/영상에서 구체명은 공개하지 않음/.test(markdown);
 }
 
 function isInsufficientVideo(video) {
