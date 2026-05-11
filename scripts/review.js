@@ -179,17 +179,18 @@ for (const block of videoBlocks) {
   let timelineMalformed = false;
 
   for (const line of timelineLines) {
-    const m = line.match(/^-\s*\[(\d{2}:\d{2}:\d{2})\]\s*(.+)$/);
+    const m = line.match(/^\-\s*\[(\d{1,2}:\d{2}(?::\d{2})?)\](?:\(https?:\/\/[^)]+\))?\s*(.+)$/);
     if (!m) {
       timelineMalformed = true;
       continue;
     }
-    timelineSec.push(parseHms(m[1]));
+    timelineSec.push(parseTimestamp(m[1]));
   }
 
   if (timelineLines.length > 0 && timelineMalformed) {
-    issues.push({ level: 'ERROR', video: title, check: 'timeline_format', detail: 'Timeline lines must be `- [HH:MM:SS] content` or `- [HH:MM:SS](URL) content`' });
+    issues.push({ level: 'ERROR', video: title, check: 'timeline_format', detail: 'Timeline lines must be `- [MM:SS] content`, `- [HH:MM:SS] content`, or the same timestamp linked to YouTube' });
     errorCount++;
+    console.log(`  ❌ ERROR: "${title}" — 주요 타임라인 형식이 잘못됨`);
   }
 
   // Inline timestamps in the structured summary body count as timeline coverage —
@@ -274,6 +275,10 @@ fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
 console.log(`\n📊 Review: ${issues.length} issues (${errorCount} errors, ${issues.length - errorCount} warnings), ${fixCount} auto-fixed`);
 
 if (errorCount > 0) {
+  console.error('\nReview errors:');
+  for (const issue of issues.filter(issue => issue.level === 'ERROR')) {
+    console.error(`- ${issue.check}${issue.video ? ` | ${issue.video}` : ''}: ${issue.detail}`);
+  }
   console.error(`❌ ${errorCount} error(s) require manual attention.`);
   process.exit(1);
 }
@@ -323,6 +328,13 @@ function looksKoreanTitle(text) {
 function parseHms(hms) {
   const [h, m, s] = hms.split(':').map(Number);
   return h * 3600 + m * 60 + s;
+}
+
+function parseTimestamp(timestamp) {
+  const parts = timestamp.split(':').map(Number);
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return Number.NaN;
 }
 
 function isSorted(values) {
