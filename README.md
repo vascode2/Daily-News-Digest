@@ -7,7 +7,7 @@
 
 ---
 
-Korean general-news and economy-leaning YouTube digest. Every morning at 7 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Claude Code, and publishes a new child page under your configured Notion page.
+Korean general-news and economy-leaning YouTube digest. Every morning at 7 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Gemini, and publishes a new child page under your configured Notion page.
 
 ## What It Watches
 
@@ -56,12 +56,20 @@ Manual workflows are also available:
 
    | Name | Value |
    | --- | --- |
-   | `CLAUDE_CODE_OAUTH_TOKEN` | Token from `claude setup-token` |
+   | `GEMINI_API_KEY` | Google AI Studio / Gemini API key |
    | `NOTION_TOKEN` | Notion integration token |
    | `NOTION_PAGE_ID` | Parent Notion page ID for News Digest |
    | `YOUTUBE_COOKIES_B64` | Base64 YouTube cookies for yt-dlp |
 
    Do not commit real token values or private page IDs to the repository.
+
+   Optional repository variable:
+
+   | Name | Default |
+   | --- | --- |
+   | `GEMINI_MODEL` | `gemini-3-fast` |
+
+   If Google exposes the model under a different exact ID in your account, set `GEMINI_MODEL` to that ID.
 
 3. In Notion, share the News Digest page with the same integration used by `NOTION_TOKEN`.
 
@@ -72,6 +80,7 @@ Manual workflows are also available:
 ```bash
 npm run collect        # yesterday's videos
 npm run collect:week   # last 7 days
+npm run summarize      # generate tmp/summaries-*.md with Gemini
 npm run review         # validate latest tmp/summaries-*.md
 npm run publish        # write output/ and publish to Notion if env vars are set
 ```
@@ -96,6 +105,7 @@ In PowerShell, quote the handle: `--channel '@3protv'`.
 │   └── keywords.txt
 ├── scripts/
 │   ├── collect.js
+│   ├── summarize-gemini.js
 │   ├── review.js
 │   └── publish.js
 ├── .github/workflows/

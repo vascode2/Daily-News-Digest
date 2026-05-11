@@ -1,7 +1,7 @@
-# Sub-Agent: Summarizer (Claude Code in-conversation)
+# Summarizer Guidance (Gemini)
 
 ## Role
-When triggered by "어제 거 요약해 줘" or similar, Claude Code reads the raw video data and writes summaries directly — no API call required.
+When triggered by "어제 거 요약해 줘" or similar, `scripts/summarize-gemini.js` sends the raw video data and these rules to Gemini, then writes summaries.
 
 ## Inputs
 - `tmp/raw-YYYY-MM-DD.json` — collected video data

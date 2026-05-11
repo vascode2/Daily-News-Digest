@@ -45,7 +45,7 @@ test('channels.txt has at least 1 channel', () => {
 });
 
 console.log('\nStage 2: Script files');
-for (const script of ['collect.js', 'review.js', 'publish.js']) {
+for (const script of ['collect.js', 'summarize-gemini.js', 'review.js', 'publish.js']) {
   test(`scripts/${script} exists`, () => {
     assert(fs.existsSync(path.join(ROOT, 'scripts', script)), 'missing');
   });
