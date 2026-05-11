@@ -70,7 +70,9 @@ Manual workflows are also available:
    | --- | --- |
    | `GEMINI_MODEL` | `gemini-3-fast` preferred; falls back automatically if unavailable |
 
-   If Google exposes the model under a different exact ID in your account, set `GEMINI_MODEL` to that ID. If the preferred model is unavailable, the script automatically tries `gemini-2.5-flash`, `gemini-2.0-flash`, then `gemini-1.5-flash`.
+   If Google exposes the model under a different exact ID in your account, set `GEMINI_MODEL` to that ID. If the preferred model is unavailable, the script automatically tries `gemini-3-flash-preview`, `gemini-2.5-flash`, `gemini-2.0-flash`, then `gemini-1.5-flash`.
+
+   When yt-dlp cannot collect transcript segments, `npm run summarize` also asks Gemini to inspect the public YouTube URL directly and produce timestamp notes. Disable with `GEMINI_YOUTUBE_FALLBACK=false`, or raise `GEMINI_YOUTUBE_FALLBACK_LIMIT` for larger daily batches.
 
 3. In Notion, share the News Digest page with the same integration used by `NOTION_TOKEN`.
 

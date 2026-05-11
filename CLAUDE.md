@@ -69,6 +69,7 @@ NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
 NOTION_PAGE_ID=your_32_character_notion_page_id  # News Digest parent page
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-3-fast    # Optional preferred model; script falls back if unavailable
+GEMINI_YOUTUBE_FALLBACK=true  # Optional: use Gemini YouTube URL input when transcripts are missing
 ```
 **No ANTHROPIC_API_KEY needed** — summarization runs through Gemini.
 

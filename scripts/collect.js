@@ -205,7 +205,7 @@ const concurrency = Math.max(1, Math.min(
 console.log(`⚙️  Concurrency: ${concurrency} channel${concurrency > 1 ? 's' : ''} in parallel\n`);
 
 // Per-channel fetch — pure function, safe to run in parallel.
-function fetchChannel(channelEntry) {
+async function fetchChannel(channelEntry) {
   const handle = channelEntry.handle.startsWith('@') ? channelEntry.handle : `@${channelEntry.handle}`;
   const requiredKeywords = channelEntry.requiredKeywords || [];
   const url = `https://www.youtube.com/${handle}/videos`;
@@ -273,6 +273,7 @@ function fetchChannel(channelEntry) {
     let transcript = '';
     let transcriptSegments = [];
     let hasTranscript = false;
+    let transcriptSource = '';
 
     spawnSync('yt-dlp', [
       ...cookieArgs,
@@ -298,7 +299,18 @@ function fetchChannel(channelEntry) {
         : parseVTTSegments(subtitleContent);
       transcript = transcriptSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
       hasTranscript = transcriptSegments.length >= 3 && transcript.length > 100;
+      transcriptSource = subtitleFile;
       subtitleFiles.forEach(f => { try { fs.unlinkSync(path.join(tmpDir, f)); } catch {} });
+    }
+
+    if (!hasTranscript) {
+      const fallback = await fetchTranscriptFromMetadata(video);
+      if (fallback.transcriptSegments.length > 0) {
+        transcriptSegments = fallback.transcriptSegments;
+        transcript = transcriptSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+        hasTranscript = transcriptSegments.length >= 3 && transcript.length > 100;
+        transcriptSource = fallback.source;
+      }
     }
 
     if (requiredKeywords.length > 0 && !matchesKeywords(video, transcript, requiredKeywords)) {
@@ -328,11 +340,69 @@ function fetchChannel(channelEntry) {
     });
     savedThisChannel++;
 
-    push(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? '' : '(desc only)'}`);
+    push(`  📝 [${uploadDateStr}] ${video.title} ${hasTranscript ? `(${transcriptSegments.length} transcript segments via ${transcriptSource})` : '(desc only)'}`);
   }
 
   if (matched === 0) push(`  ⏭️  No videos in range`);
   return { handle, videos: out, log };
+}
+
+async function fetchTranscriptFromMetadata(video) {
+  for (const entry of subtitleMetadataEntries(video)) {
+    try {
+      const res = await fetch(entry.url, {
+        headers: {
+          'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+          'User-Agent': 'Mozilla/5.0'
+        }
+      });
+      if (!res.ok) continue;
+      const text = await res.text();
+      const segments = entry.ext === 'json3' || entry.url.includes('fmt=json3')
+        ? parseJSON3Segments(text)
+        : parseVTTSegments(text);
+      if (segments.length >= 3) {
+        return { transcriptSegments: segments, source: `${entry.lang}.${entry.ext} timedtext` };
+      }
+    } catch {
+      // Try the next available caption URL.
+    }
+  }
+
+  return { transcriptSegments: [], source: '' };
+}
+
+function subtitleMetadataEntries(video) {
+  const entries = [];
+  const pools = [video.subtitles || {}, video.automatic_captions || {}];
+
+  for (const pool of pools) {
+    for (const [lang, items] of Object.entries(pool)) {
+      if (!Array.isArray(items)) continue;
+      for (const item of items) {
+        if (!item?.url) continue;
+        const ext = item.ext || (item.url.includes('fmt=json3') ? 'json3' : item.url.includes('fmt=vtt') ? 'vtt' : '');
+        if (!['json3', 'vtt'].includes(ext)) continue;
+        entries.push({ lang, ext, url: item.url });
+      }
+    }
+  }
+
+  return entries.sort((a, b) =>
+    subtitleLanguageRank(a.lang) - subtitleLanguageRank(b.lang) ||
+    subtitleFormatRank(a.ext) - subtitleFormatRank(b.ext)
+  );
+}
+
+function subtitleLanguageRank(lang) {
+  if (lang === 'ko-orig') return 0;
+  if (lang === 'ko') return 1;
+  if (lang === 'en') return 2;
+  return 9;
+}
+
+function subtitleFormatRank(ext) {
+  return ext === 'json3' ? 0 : 1;
 }
 
 function parseChannelLine(line) {
