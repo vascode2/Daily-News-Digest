@@ -268,6 +268,11 @@ async function fetchChannel(channelEntry) {
       if (uploadDate > endStrYtdlp) continue;
     }
 
+    if (shouldSkipRestrictedVideo(video)) {
+      push(`  ⏭️  Skipped (restricted/members-only): ${video.title}`);
+      continue;
+    }
+
     matched++;
 
     let transcript = '';
@@ -323,6 +328,12 @@ async function fetchChannel(channelEntry) {
       continue;
     }
 
+    const sourceText = `${transcript || ''}\n${video.description || ''}`.replace(/\s+/g, ' ').trim();
+    if (!hasTranscript && sourceText.length < 300) {
+      push(`  ⏭️  Skipped (insufficient text): ${video.title}`);
+      continue;
+    }
+
     const uploadDateStr = `${uploadDate.slice(0,4)}-${uploadDate.slice(4,6)}-${uploadDate.slice(6,8)}`;
 
     out.push({
@@ -345,6 +356,20 @@ async function fetchChannel(channelEntry) {
 
   if (matched === 0) push(`  ⏭️  No videos in range`);
   return { handle, videos: out, log };
+}
+
+function shouldSkipRestrictedVideo(video) {
+  const text = [video.title, video.description, video.availability, video.live_status, video.release_timestamp]
+    .filter(Boolean)
+    .join('\n')
+    .toLocaleLowerCase();
+
+  return Boolean(
+    video.is_private ||
+    video.needs_subscription ||
+    video.is_members_only ||
+    /members[- ]only|member only|membership|join this channel|멤버십|회원 전용|구독자 전용|비공개|프리미어 공개 전|premiere/.test(text)
+  );
 }
 
 async function fetchTranscriptFromMetadata(video) {

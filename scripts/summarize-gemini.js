@@ -59,6 +59,10 @@ console.log(`Saved: ${outputFile}`);
 
 async function summarizeVideo(video, index, total) {
   const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+  if (isInsufficientVideo(video)) {
+    return unavailableVideoMarkdown(video, videoUrl);
+  }
+
   const prompt = `You are writing one Korean YouTube video summary for a morning news digest.
 
 This is video ${index} of ${total}. Focus only on this video. Do not summarize other videos.
@@ -94,6 +98,36 @@ ${JSON.stringify(video, null, 2)}`;
 
   const response = await callGeminiWithFallback(prompt);
   return normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
+}
+
+function isInsufficientVideo(video) {
+  const sourceText = [video.transcript, video.description]
+    .filter(Boolean)
+    .join('\n')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const hasSegments = (video.transcriptSegments || []).length >= 3;
+  const hasTimestampNotes = (video.geminiTimestampNotes || []).length >= 3;
+  return !hasSegments && !hasTimestampNotes && sourceText.length < 300;
+}
+
+function unavailableVideoMarkdown(video, videoUrl) {
+  const fallbackTitle = String(video.title || '내용 부족 영상')
+    .replace(/[\[\]\n]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return `## [${fallbackTitle}](${videoUrl})
+
+**한 줄 인사이트**
+💡 자막과 설명이 충분하지 않아 신뢰할 수 있는 요약을 만들 수 없습니다.
+
+**핵심 요약**
+이 영상은 자막, 설명, Gemini timestamp notes가 충분하지 않아 핵심 내용을 검증할 수 없습니다.
+
+1. **내용 부족**
+   - 영상에서 구체적인 발언, 종목, 수치, 정책 내용을 확인할 수 없어 요약을 보류합니다.
+   - 멤버십 전용, 비공개, 자막 미제공, 또는 설명 부족 영상일 가능성이 있습니다.`;
 }
 
 function normalizeVideoMarkdown(markdown, video) {
