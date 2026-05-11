@@ -110,8 +110,8 @@ async function callGeminiWithFallback(text) {
       return response;
     } catch (err) {
       errors.push(`${model}: ${err.message}`);
-      if (!isMissingModelError(err)) throw err;
-      console.warn(`Model unavailable, trying fallback: ${model}`);
+      if (!isMissingModelError(err) && !isQuotaError(err)) throw err;
+      console.warn(`${isQuotaError(err) ? 'Model quota exhausted' : 'Model unavailable'}, trying fallback: ${model}`);
     }
   }
 
@@ -121,14 +121,15 @@ async function callGeminiWithFallback(text) {
 async function enrichWithGeminiVideoTimestamps(items) {
   if (process.env.GEMINI_YOUTUBE_FALLBACK === 'false') return items;
 
-  const maxVideos = Math.max(0, parseInt(process.env.GEMINI_YOUTUBE_FALLBACK_LIMIT || '12', 10) || 12);
+  const maxVideos = Math.max(0, parseInt(process.env.GEMINI_YOUTUBE_FALLBACK_LIMIT || '2', 10) || 2);
   let enriched = 0;
+  let quotaExhausted = false;
   const output = [];
 
   for (const item of items) {
     const clone = { ...item };
     const hasSegments = (clone.transcriptSegments || []).length >= 3;
-    if (!hasSegments && clone.videoId && enriched < maxVideos) {
+    if (!hasSegments && clone.videoId && enriched < maxVideos && !quotaExhausted) {
       try {
         clone.geminiTimestampNotes = await callGeminiVideoTimestampsWithFallback(clone);
         if (clone.geminiTimestampNotes.length >= 3) {
@@ -136,7 +137,12 @@ async function enrichWithGeminiVideoTimestamps(items) {
           console.log(`Added Gemini video timestamp fallback: ${clone.videoId} (${clone.geminiTimestampNotes.length} notes)`);
         }
       } catch (err) {
-        console.warn(`Gemini video timestamp fallback skipped for ${clone.videoId}: ${err.message}`);
+        if (isQuotaError(err)) {
+          quotaExhausted = true;
+          console.warn(`Gemini video timestamp fallback paused after quota limit: ${err.message}`);
+        } else {
+          console.warn(`Gemini video timestamp fallback skipped for ${clone.videoId}: ${err.message}`);
+        }
         clone.geminiTimestampNotes = [];
       }
     }
@@ -153,6 +159,7 @@ async function callGeminiVideoTimestampsWithFallback(video) {
       return await callGeminiVideoTimestamps(model, video);
     } catch (err) {
       errors.push(`${model}: ${err.message}`);
+      if (isQuotaError(err)) throw err;
       if (!isMissingModelError(err) && !isVideoInputModelError(err)) throw err;
     }
   }
@@ -256,6 +263,10 @@ function formatCompactTimestamp(seconds) {
 
 function isMissingModelError(err) {
   return err?.status === 404 || /not found|NOT_FOUND|not supported for generateContent/i.test(err?.body || err?.message || '');
+}
+
+function isQuotaError(err) {
+  return err?.status === 429 || /RESOURCE_EXHAUSTED|quota exceeded|rate[- ]?limit/i.test(err?.body || err?.message || '');
 }
 
 function isVideoInputModelError(err) {
