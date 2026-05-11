@@ -72,12 +72,13 @@ Output requirements:
 - Start with exactly one h2 video heading: ## [한국어 영상 제목](${videoUrl})
 - The first sentence after **핵심 요약** must NOT restate the video title. Start with the speaker, issue, claim, or data point instead.
 - Do NOT include a digest title, channel heading, upload date, view count, duration, or transcript indicator.
-- Section order: **한 줄 인사이트** → **핵심 요약** → optional **주요 타임라인**.
+- Section order: **한 줄 인사이트** → **핵심 요약** → **주요 타임라인** when transcriptSegments or geminiTimestampNotes exist.
 - 핵심 요약 = intro 1-2 sentences + 3-5 numbered points with bold sub-headings. Each point has 1-3 sub-bullets.
 - Use concrete names/companies/stocks/sectors/numbers/years from the transcript, description, or geminiTimestampNotes.
-- If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS).
-- If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use those notes for at least 3 inline timestamp links.
+- If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS), and include a **주요 타임라인** section with 3-6 linked entries.
+- If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use those notes for at least 3 inline timestamp links and include a **주요 타임라인** section with 3-6 linked entries.
 - If both transcriptSegments and geminiTimestampNotes are empty, do not invent timestamps and omit 주요 타임라인.
+- Use exactly one inline timestamp per bullet. Two timestamps beside each other are not a range; avoid adjacent timestamp links like [03:07](...) [05:40](...). Put extra moments in 주요 타임라인 instead.
 - No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
 
 Teaser-resolution requirements, very important:

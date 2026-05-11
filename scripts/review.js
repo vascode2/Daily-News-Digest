@@ -79,16 +79,14 @@ for (const block of videoBlocks) {
       console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
     }
   }
-  // 주요 타임라인 is optional — only warn if missing.
-  // It can also be replaced by inline timestamps in the structured summary body
-  // (computed below as `inlineStamps`); we re-check after that count is known.
-  const summaryTextEarly = extractSectionBody(block, '핵심 요약', ['주요 타임라인']);
-  const earlyInlineStamps = (summaryTextEarly.match(/\[\[?\d{1,2}:\d{2}(?::\d{2})?\]?\]\(https?:\/\/[^)]*[?&]t=\d+/g) || []).length;
+  // 주요 타임라인 is required when transcript segments are available.
+  // Inline timestamps still count for coverage, but they no longer replace the
+  // quick-scan timeline section.
   for (const section of transcriptOnlyRequired) {
-    if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && !block.includes(section) && earlyInlineStamps < 3) {
-      issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section} (and <3 inline timestamps in body)` });
+    if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && !block.includes(section)) {
+      issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section} (transcript available)` });
       errorCount++;
-      console.log(`  ❌ ERROR: "${title}" — missing section: ${section} (transcript available, no inline stamps)`);
+      console.log(`  ❌ ERROR: "${title}" — missing section: ${section} (transcript available)`);
     } else if (!raw?.hasTranscript && !block.includes(section)) {
       issues.push({ level: 'WARNING', video: title, check: 'missing_section', detail: `Missing: ${section}` });
     }
