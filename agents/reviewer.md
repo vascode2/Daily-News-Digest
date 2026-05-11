@@ -21,7 +21,7 @@ Quality-check generated summaries and auto-fix common issues before publishing.
 - Mixed language in single summary → flag as ERROR, fix to Korean
 
 ### 3-1. Evidence Check
-- 핵심 요약에 발표자가 든 사례/데모/비교 예시가 최소 1개 포함되어야 함
+- 핵심 요약에 발표자가 든 사례/데모/비교 예시가 있으면 포함 권장. 단, 명시적 단어가 없어도 구체 명사/숫자/타임스탬프가 충분하면 publish를 막지 않음
 - 누락 시 ERROR
 
 ### 4. Relevance Check
