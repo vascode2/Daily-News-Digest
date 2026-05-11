@@ -28,6 +28,7 @@ Global filtering through [config/keywords.txt](config/keywords.txt) is still ava
 ## Output Format
 
 - Channel names, video titles, and transcript-based timestamps are clickable.
+- Video display titles are Korean. If YouTube metadata arrives as an English auto-translation, the summarizer translates the h2 title back into Korean while keeping the YouTube link.
 - When transcript timing data is available, key summary bullets include inline timestamp links like `[[02:02](https://www.youtube.com/watch?v=VIDEO_ID&t=122)]`.
 - When transcript timing data is available, the main summary body must include at least 3 inline timestamp links. The separate `주요 타임라인` section is optional and usually omitted.
 - When a video has only a description and no transcript segments, the digest does not invent timestamps.

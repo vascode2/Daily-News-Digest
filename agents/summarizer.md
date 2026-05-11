@@ -28,6 +28,7 @@ Tone:
 ## Language & Format Rules
 - Korean channels (e.g., @dekilab, @bitgapnam) → **Korean output**
 - English channels (e.g., @careerhackeralex, @aiDotEngineer) → **Korean summary** (translate to Korean)
+- 영상 h2 제목도 한국어로 작성. raw JSON 제목이 영어 자동 번역으로 들어왔으면 자막 맥락을 바탕으로 자연스럽게 한국어로 되돌리고, 링크 URL은 그대로 유지
 - 핵심 요약 = 도입 1~2문장 + **번호 매긴 3~5개 굵은 소제목** + 각 소제목 아래 1~3개 sub-bullet (자세한 골격은 `config/format.md` 참고)
 - sub-bullet에는 자막에서 인용한 **구체적 인명·기업명·숫자·연도**를 넣고, 끝에 **인라인 타임스탬프** `[[HH:MM](youtube_url&t=SECONDS)]`를 붙임
 - `transcriptSegments`가 있으면 첨부 예시처럼 핵심 요약 bullet마다 링크 타임스탬프를 붙이고, 한 영상당 최소 3개 이상 포함. 이 경우 `[자막 기반 타임라인 없음]`을 절대 쓰지 않음
@@ -42,7 +43,7 @@ Tone:
 
 ### 📺 [채널명](https://www.youtube.com/@CHANNEL_HANDLE)
 
-## [Video Title 1](https://www.youtube.com/watch?v=VIDEO_ID)
+## [한국어 영상 제목](https://www.youtube.com/watch?v=VIDEO_ID)
 
 💡 한 줄 인사이트 문장
 
@@ -59,7 +60,7 @@ Tone:
 
 **중요 규칙:**
 1. 채널 h3 헤딩은 반드시 YouTube 채널 링크로: `### 📺 [채널명](https://www.youtube.com/@HANDLE)`
-2. 영상 h2 헤딩은 YouTube 링크로: `## [제목](https://www.youtube.com/watch?v=VIDEO_ID)`
+2. 영상 h2 헤딩은 한국어 제목 + YouTube 링크로: `## [한국어 제목](https://www.youtube.com/watch?v=VIDEO_ID)`
 3. **섹션 순서 (매우중요)**: 한 줄 인사이트 → 핵심 요약 → 주요 타임라인
 4. **블록인용 제거**: 모든 `>` 기호 제거 (단락끼리 자연스럽게 구분)
 5. 타임라인 timestamps는 YouTube 링크 형식: `[HH:MM:SS](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)`

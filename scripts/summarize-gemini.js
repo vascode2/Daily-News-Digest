@@ -45,8 +45,9 @@ First line must be exactly: ${title}
 
 Hard requirements:
 - Write Korean summaries, even if a video title or transcript is English.
+- Video h2 display titles MUST be Korean. If a raw title is English or YouTube auto-translated English, translate it back into natural Korean based on the raw title and transcript context. Preserve proper nouns like GTX, AI, Fed, USDT, company names, and guest names.
 - Group videos by channel under channel h3 headings: ### 📺 [ChannelName](https://www.youtube.com/@CHANNEL_HANDLE)
-- Each video title must be h2 with a clickable YouTube link: ## [Title](https://www.youtube.com/watch?v=VIDEO_ID)
+- Each video title must be h2 with a Korean clickable YouTube link: ## [한국어 제목](https://www.youtube.com/watch?v=VIDEO_ID)
 - Section order per video: 한 줄 인사이트 → 핵심 요약 → optional 주요 타임라인.
 - Prefer omitting 주요 타임라인 when 핵심 요약 already has 3+ inline timestamp links.
 - For every video object, inspect transcriptSegments before writing.

@@ -50,6 +50,17 @@ for (const block of videoBlocks) {
   const videoId = urlMatch ? urlMatch[2] : null;
   const raw = videoId ? rawByVideoId.get(videoId) : null;
 
+  if (!looksKoreanTitle(title)) {
+    issues.push({
+      level: 'ERROR',
+      video: title,
+      check: 'title_language',
+      detail: 'Video h2 display title must be Korean; translate English auto-translated YouTube titles back to Korean'
+    });
+    errorCount++;
+    console.log(`  ❌ ERROR: "${title}" — 영상 제목이 한국어가 아님`);
+  }
+
   if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && block.includes('[자막 기반 타임라인 없음]')) {
     issues.push({
       level: 'ERROR',
@@ -302,6 +313,12 @@ function looksMostlyKorean(text, minHangulOverLatin = 1.1) {
   const latin = (text.match(/[A-Za-z]/g) || []).length;
   if (!text.trim()) return false;
   return hangul >= Math.max(30, latin * minHangulOverLatin);
+}
+
+function looksKoreanTitle(text) {
+  const hangul = (text.match(/[가-힣]/g) || []).length;
+  const latin = (text.match(/[A-Za-z]/g) || []).length;
+  return hangul >= 4 || (hangul > 0 && latin <= hangul * 2);
 }
 
 function parseHms(hms) {

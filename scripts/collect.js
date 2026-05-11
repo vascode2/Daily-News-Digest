@@ -187,7 +187,10 @@ if (ytdlpCheck.error || ytdlpCheck.status !== 0) {
 
 const startStrYtdlp = startStr.replace(/-/g, '');
 const endStrYtdlp = endStr.replace(/-/g, '');
-const youtubeClientArgs = ['--extractor-args', 'youtube:player_client=default,web,android,ios,tv'];
+const youtubeClientArgs = [
+  '--extractor-args', 'youtube:player_client=default,web,android,ios,tv;lang=ko',
+  '--add-header', 'Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+];
 
 const PLAYLIST_END = mode === 'channel' ? limit : Math.max(10, days * 5);
 
