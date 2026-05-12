@@ -6,6 +6,14 @@ on:
     # daylight saving time and 12:00 UTC during standard time.
     - cron: '0 11 * * *'
     - cron: '0 12 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/daily-digest.yml'
+      - 'scripts/**'
+      - 'config/**'
+      - 'agents/**'
+      - 'package*.json'
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
@@ -23,9 +31,9 @@ jobs:
       - name: Check 7 AM local time
         id: gate
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Manual run: proceeding."
+            echo "Manual or push verification run: proceeding."
             exit 0
           fi
 
@@ -88,6 +96,8 @@ jobs:
           NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
           NOTION_ROOT_TITLE: News Digest
           DIGEST_TIMEZONE: America/New_York
+          DIGEST_COMPARE_METHOD: "2 - selected restore from 485e96b"
+          DIGEST_SKIP_NOTION: "true"
         run: npm run publish
 
       - name: Commit output back to repo
