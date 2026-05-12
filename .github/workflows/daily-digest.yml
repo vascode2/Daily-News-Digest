@@ -9,6 +9,10 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/daily-digest.yml' # one-shot push verification path
+      - 'scripts/**'
+      - 'config/**'
+      - 'agents/**'
+      - 'package*.json'
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
