@@ -217,7 +217,13 @@ function normalizeVideoMarkdown(markdown, video) {
     .replace(/\n---\s*$/g, '')
     .trim();
 
-  if (!/^##\s+\[[^\]]+\]\(https:\/\/www\.youtube\.com\/watch\?v=/m.test(cleaned)) {
+  // Detect any H2 line whose link target points at this video. This is more
+  // permissive than `\[[^\]]+\]` so that titles containing literal `[` or `]`
+  // (e.g. "[미방 풀영상]") still count as a valid heading and we don't double up.
+  const hasVideoH2 = cleaned.split('\n').some(line =>
+    /^##\s+/.test(line) && line.includes(`watch?v=${video.videoId}`)
+  );
+  if (!hasVideoH2) {
     const fallbackTitle = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
     cleaned = `## [${fallbackTitle}](https://www.youtube.com/watch?v=${video.videoId})\n\n${cleaned}`;
   }
