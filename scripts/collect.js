@@ -6,7 +6,7 @@
  *   --days 7            → last 7 days   → tmp/raw-YYYY-MM-DD_to_YYYY-MM-DD.json
  */
 
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -215,7 +215,7 @@ async function fetchChannel(channelEntry) {
 
   push(`Fetching ${handle}${requiredKeywords.length ? ` (follow filter: ${requiredKeywords.join(', ')})` : ''}...`);
 
-  const listResult = spawnSync('yt-dlp', [
+  const listResult = await runCommand('yt-dlp', [
     ...cookieArgs,
     '--dump-json',
     '--skip-download',
@@ -225,7 +225,7 @@ async function fetchChannel(channelEntry) {
     '--ignore-errors',
     '--no-warnings',
     url
-  ], { encoding: 'utf8', timeout: 180000, maxBuffer: 200 * 1024 * 1024 });
+  ], { timeout: 180000, maxBuffer: 200 * 1024 * 1024 });
 
   if (listResult.status !== 0 && !listResult.stdout) {
     const stderr = (listResult.stderr || '').split('\n').filter(Boolean).slice(0, 3).join(' | ');
@@ -280,7 +280,7 @@ async function fetchChannel(channelEntry) {
     let hasTranscript = false;
     let transcriptSource = '';
 
-    spawnSync('yt-dlp', [
+    await runCommand('yt-dlp', [
       ...cookieArgs,
       '--write-auto-sub',
       '--sub-lang', 'ko-orig,ko,en',
@@ -291,7 +291,7 @@ async function fetchChannel(channelEntry) {
       '--no-warnings',
       '-o', path.join(tmpDir, `%(id)s.%(ext)s`),
       videoUrl
-    ], { encoding: 'utf8', timeout: 60000 });
+    ], { timeout: 60000 });
 
     const subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
       f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
@@ -438,6 +438,56 @@ function parseChannelLine(line) {
     .filter(Boolean);
 
   return { handle, requiredKeywords };
+}
+
+function runCommand(command, args, { timeout = 60000, maxBuffer = 20 * 1024 * 1024 } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { windowsHide: true });
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    let stdoutSize = 0;
+    let stderrSize = 0;
+    let timedOut = false;
+    let overflow = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeout);
+
+    child.stdout.on('data', chunk => {
+      stdoutSize += chunk.length;
+      if (stdoutSize <= maxBuffer) stdoutChunks.push(chunk);
+      else {
+        overflow = true;
+        child.kill('SIGTERM');
+      }
+    });
+
+    child.stderr.on('data', chunk => {
+      stderrSize += chunk.length;
+      if (stderrSize <= maxBuffer) stderrChunks.push(chunk);
+      else {
+        overflow = true;
+        child.kill('SIGTERM');
+      }
+    });
+
+    child.on('error', error => {
+      clearTimeout(timer);
+      resolve({ status: 1, stdout: '', stderr: error.message, error });
+    });
+
+    child.on('close', code => {
+      clearTimeout(timer);
+      const stderr = Buffer.concat(stderrChunks).toString('utf8') + (timedOut ? '\nProcess timed out' : '') + (overflow ? '\nOutput exceeded maxBuffer' : '');
+      resolve({
+        status: code ?? (timedOut || overflow ? 1 : 0),
+        stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+        stderr
+      });
+    });
+  });
 }
 
 function matchesKeywords(video, transcript, requiredKeywords) {

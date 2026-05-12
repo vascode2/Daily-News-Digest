@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write  # output/ 커밋 권한
 
+concurrency:
+  group: daily-digest-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   digest:
     runs-on: ubuntu-latest
