@@ -215,8 +215,8 @@ async function fetchChannel(channelEntry) {
 
   push(`Fetching ${handle}${requiredKeywords.length ? ` (follow filter: ${requiredKeywords.join(', ')})` : ''}...`);
 
-  const listResult = await runCommand('yt-dlp', [
-    ...cookieArgs,
+  const fetchList = (authArgs = []) => runCommand('yt-dlp', [
+    ...authArgs,
     '--dump-json',
     '--skip-download',
     '--ignore-no-formats-error',
@@ -226,6 +226,12 @@ async function fetchChannel(channelEntry) {
     '--no-warnings',
     url
   ], { timeout: 180000, maxBuffer: 200 * 1024 * 1024 });
+
+  let listResult = await fetchList();
+  if (cookieArgs.length > 0 && (listResult.status !== 0 || !listResult.stdout.trim())) {
+    push('  ↪️  Anonymous metadata fetch was empty/failed; retrying with cookies');
+    listResult = await fetchList(cookieArgs);
+  }
 
   if (listResult.status !== 0 && !listResult.stdout) {
     const stderr = (listResult.stderr || '').split('\n').filter(Boolean).slice(0, 3).join(' | ');
@@ -280,8 +286,8 @@ async function fetchChannel(channelEntry) {
     let hasTranscript = false;
     let transcriptSource = '';
 
-    await runCommand('yt-dlp', [
-      ...cookieArgs,
+    const fetchSubtitles = (authArgs = []) => runCommand('yt-dlp', [
+      ...authArgs,
       '--write-auto-sub',
       '--sub-lang', 'ko-orig,ko,en',
       '--sub-format', 'json3/vtt',
@@ -293,9 +299,18 @@ async function fetchChannel(channelEntry) {
       videoUrl
     ], { timeout: 60000 });
 
-    const subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
+    await fetchSubtitles();
+
+    let subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
       f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
     ));
+
+    if (subtitleFiles.length === 0 && cookieArgs.length > 0) {
+      await fetchSubtitles(cookieArgs);
+      subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
+        f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
+      ));
+    }
     if (subtitleFiles.length > 0) {
       const subtitleFile = subtitleFiles[0];
       const subtitleContent = fs.readFileSync(path.join(tmpDir, subtitleFile), 'utf8');
