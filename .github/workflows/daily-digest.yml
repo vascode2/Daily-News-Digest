@@ -1,5 +1,6 @@
 name: '[AUTO] Daily News Digest'
 
+# Trigger after YOUTUBE_COOKIES_B64 secret refresh (2026-05-12)
 on:
   schedule:
     # GitHub cron is UTC only. 7 AM America/New_York is 11:00 UTC during
