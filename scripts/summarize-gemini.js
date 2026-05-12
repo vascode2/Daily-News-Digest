@@ -132,29 +132,34 @@ function buildFallbackVideoMarkdown(video) {
   const title = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
   const description = neutralizeFallbackTeasers(firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.');
   const segments = selectFallbackTimelineSegments(video);
+  const channelName = String(video.channelName || video.channel || '채널 미상').trim();
 
   const lines = [
     `## [${title}](${videoUrl})`,
     '',
     '**한 줄 인사이트**',
-    '',
-    `${description}`,
+    `💡 ${description}`,
     '',
     '**핵심 요약**',
+    `${channelName} 영상의 자동 요약 응답이 제한되어 제목·설명·자막 조각만으로 보수적으로 정리한 사례입니다. 영상 본문에서 직접 확인이 권장되며, 아래는 공개 메타데이터에서 확인 가능한 범위입니다.`,
     '',
-    'Gemini 응답이 제한되어 제목, 설명, 자막 조각을 기준으로 확인 가능한 내용만 보수적으로 정리했습니다.',
+    `1. **영상 개요**`,
+    `   - ${description}`,
+    `   - 채널: ${channelName}`,
     '',
-    description
+    `2. **확인 권장 구간**`,
   ];
 
   if (segments.length >= 3) {
-    lines.push('', `자막에서 의미가 비교적 분명한 구간은 [${formatCompactTimestamp(segments[0].seconds)}](${videoUrl}&t=${segments[0].seconds})부터 확인할 수 있습니다.`);
+    const first = segments[0];
+    lines.push(`   - 자막 기준으로 의미가 비교적 분명한 구간은 [${formatCompactTimestamp(first.seconds)}](${videoUrl}&t=${first.seconds})부터 확인할 수 있습니다.`);
     lines.push('', '**주요 타임라인**', '');
     for (const segment of segments) {
       lines.push(`- [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
     }
   } else {
-    lines.push('', '자막 조각이 충분하지 않아 제목과 설명 중심으로만 요약했습니다.');
+    lines.push(`   - 자막 조각이 충분하지 않아 별도 타임라인은 제공되지 않습니다. 영상에서 직접 확인을 권장합니다.`);
+    lines.push('', `> ⚠️ Gemini 응답이 제한되어 자동 요약이 제한된 상태입니다.`);
   }
 
   return lines.join('\n').trim();
