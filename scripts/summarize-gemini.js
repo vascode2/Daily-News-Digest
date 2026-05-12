@@ -251,6 +251,7 @@ Return JSON only, no markdown, with this exact shape:
 Requirements:
 - Create 5 to 8 notes when possible.
 - Use timestamps that actually correspond to the video.
+- Every seconds value must be within the video duration: ${Number.isFinite(video.duration) ? `${video.duration} seconds` : 'unknown'}.
 - Keep labels factual and specific: names, numbers, companies, policies, or claims.
 - Do not add generic advice.
 - Video title: ${video.title || ''}`;
@@ -259,7 +260,7 @@ Requirements:
     { file_data: { file_uri: videoUrl } },
     { text }
   ]);
-  return normalizeTimestampNotes(extractJsonObject(extractText(response)).notes || [], video.videoId);
+  return normalizeTimestampNotes(extractJsonObject(extractText(response)).notes || [], video.videoId, video.duration);
 }
 
 async function callGemini(model, text, parts = [{ text }]) {
@@ -299,12 +300,14 @@ function extractJsonObject(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-function normalizeTimestampNotes(notes, videoId) {
+function normalizeTimestampNotes(notes, videoId, duration) {
+  const maxSeconds = Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : null;
   return notes
     .map(note => {
       const seconds = Number.isFinite(note.seconds) ? Math.max(0, Math.floor(note.seconds)) : parseTimestamp(note.time);
       const label = String(note.label || '').replace(/\s+/g, ' ').trim();
       if (!Number.isFinite(seconds) || !label) return null;
+      if (maxSeconds !== null && seconds > maxSeconds) return null;
       return {
         time: formatCompactTimestamp(seconds),
         seconds,

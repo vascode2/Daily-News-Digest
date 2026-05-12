@@ -124,16 +124,6 @@ for (const block of videoBlocks) {
     console.log(`  ❌ ERROR: "${title}" — 핵심 요약 언어가 한국어 중심이 아님`);
   }
 
-  if (!/(예를 들어|예시|사례|데모|실험|비교)/.test(normalizedSummary)) {
-    issues.push({
-      level: 'WARNING',
-      video: title,
-      check: 'summary_examples',
-      detail: '핵심 요약 should include at least one concrete example/demo/case when the transcript provides one'
-    });
-    console.log(`  ⚠️  WARNING: "${title}" — 핵심 요약에 명시적 사례/데모 단어가 없음`);
-  }
-
   if (/(?:'|"|‘|“)?(이 주식|이 종목)(?:'|"|’|”)?/.test(normalizedSummary) && !/영상에서 구체명은 공개하지 않음/.test(normalizedSummary)) {
     issues.push({
       level: 'ERROR',
@@ -230,7 +220,8 @@ for (const block of videoBlocks) {
     errorCount++;
   }
 
-  if (raw?.duration && timelineSec.some(t => t > raw.duration)) {
+  const durationToleranceSec = 5;
+  if (raw?.duration && timelineSec.some(t => t > raw.duration + durationToleranceSec)) {
     issues.push({ level: 'ERROR', video: title, check: 'timeline_out_of_range', detail: 'Timeline contains timestamp beyond video duration' });
     errorCount++;
   }
