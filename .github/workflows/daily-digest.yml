@@ -1,5 +1,4 @@
 name: '[AUTO] Daily News Digest'
-# trigger refresh
 
 # Trigger after YOUTUBE_COOKIES_B64 secret refresh (2026-05-12)
 on:
@@ -19,7 +18,7 @@ on:
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
-  contents: write  # output/ ?????? ??????
+  contents: write  # output/ 커밋 권한
 
 concurrency:
   group: daily-digest-${{ github.ref }}
@@ -83,6 +82,7 @@ jobs:
         if: steps.gate.outputs.should_run == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-4-6' }}
         run: npm run summarize
 

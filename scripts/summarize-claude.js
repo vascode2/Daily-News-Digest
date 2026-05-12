@@ -16,6 +16,7 @@ const ROOT = path.join(__dirname, '..');
 const tmpDir = path.join(ROOT, 'tmp');
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
+const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_OAUTH_TOKEN;
 const requestedModel = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
 const claudeRequestTimeoutMs = Math.max(30000, parseInt(process.env.CLAUDE_REQUEST_TIMEOUT_MS || '180000', 10) || 180000);
 const claudeMaxTokens = Math.max(1024, parseInt(process.env.CLAUDE_MAX_TOKENS || '4096', 10) || 4096);
@@ -25,10 +26,12 @@ const fallbackModels = (process.env.CLAUDE_FALLBACK_MODELS || 'claude-sonnet-4-6
   .filter(Boolean);
 const modelsToTry = [...new Set([requestedModel, ...fallbackModels])];
 
-if (!apiKey) {
-  console.error('Missing ANTHROPIC_API_KEY. Add it as a GitHub Actions secret or local environment variable.');
+if (!apiKey && !oauthToken) {
+  console.error('Missing ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN. Add one as a GitHub Actions secret or local environment variable.');
   process.exit(1);
 }
+const authMode = apiKey ? 'api-key' : 'oauth';
+console.log(`Claude auth mode: ${authMode}`);
 
 const rawFile = findLatestRaw(tmpDir);
 if (!rawFile) {
@@ -309,29 +312,45 @@ async function callClaudeWithFallback(text) {
 
 async function callClaude(model, prompt) {
   const url = 'https://api.anthropic.com/v1/messages';
+  const headers = {
+    'content-type': 'application/json',
+    'anthropic-version': '2023-06-01'
+  };
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  } else {
+    headers['authorization'] = `Bearer ${oauthToken}`;
+    headers['anthropic-beta'] = 'oauth-2025-04-20';
+  }
+
+  const body = {
+    model,
+    max_tokens: claudeMaxTokens,
+    temperature: 0.2,
+    messages: [
+      { role: 'user', content: prompt }
+    ]
+  };
+  if (!apiKey) {
+    // Claude Code OAuth tokens require the standard Claude Code system prompt as the first system block.
+    body.system = [
+      { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+      { type: 'text', text: 'You are summarizing Korean YouTube videos for a morning news digest. Follow the user instructions exactly and return markdown only.' }
+    ];
+  }
+
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    },
+    headers,
     signal: AbortSignal.timeout(claudeRequestTimeoutMs),
-    body: JSON.stringify({
-      model,
-      max_tokens: claudeMaxTokens,
-      temperature: 0.2,
-      messages: [
-        { role: 'user', content: prompt }
-      ]
-    })
+    body: JSON.stringify(body)
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    const error = new Error(`Claude API failed (${res.status}): ${body.slice(0, 1200)}`);
+    const bodyText = await res.text();
+    const error = new Error(`Claude API failed (${res.status}): ${bodyText.slice(0, 1200)}`);
     error.status = res.status;
-    error.body = body;
+    error.body = bodyText;
     throw error;
   }
   return res.json();
