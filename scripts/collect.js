@@ -192,7 +192,7 @@ const youtubeClientArgs = [
   '--add-header', 'Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
 ];
 
-const PLAYLIST_END = mode === 'channel' ? limit : Math.max(10, days * 5);
+const PLAYLIST_END = mode === 'channel' ? limit : Math.max(50, days * 20);
 
 // Concurrency: how many channels to fetch in parallel.
 // Default 5 keeps us under YouTube's per-IP burst limit while cutting wall-time ~5x.
