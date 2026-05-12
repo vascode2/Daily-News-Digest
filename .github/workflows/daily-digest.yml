@@ -5,14 +5,6 @@ on:
     # GitHub cron is UTC only. Wake at both possible 7 AM America/New_York UTC
     # offsets, then gate below so only the true local 7 AM run proceeds.
     - cron: '0 11,12 * * *'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/daily-digest.yml'
-      - 'scripts/**'
-      - 'config/**'
-      - 'agents/**'
-      - 'package*.json'
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
@@ -30,9 +22,9 @@ jobs:
       - name: Check 7 AM local time
         id: gate
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Manual or push verification run: proceeding."
+            echo "Manual run: proceeding."
             exit 0
           fi
 
@@ -71,14 +63,7 @@ jobs:
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
           DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
-        run: |
-          if [ -f fixtures/raw-2026-05-10.json ]; then
-            mkdir -p tmp
-            cp fixtures/raw-2026-05-10.json tmp/raw-2026-05-10.json
-            echo "Using verified raw fixture for 2026-05-10 replay."
-          else
-            npm run collect
-          fi
+        run: npm run collect
 
       - name: Summarize via Gemini
         if: steps.gate.outputs.should_run == 'true'
@@ -90,11 +75,7 @@ jobs:
       - name: Review summaries
         if: steps.gate.outputs.should_run == 'true'
         id: review
-        run: |
-          npm run review || {
-            echo "Review reported issues; continuing so the verified replay can publish a non-empty digest."
-            cat tmp/review-report-*.json
-          }
+        run: npm run review
 
       - name: Publish to Notion + repo
         if: steps.gate.outputs.should_run == 'true'
