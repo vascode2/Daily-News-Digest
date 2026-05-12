@@ -33,10 +33,10 @@ jobs:
             echo "Scheduled run is ${local_hour}:00 America/New_York: skipping."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.gate.outputs.should_run == 'true'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.gate.outputs.should_run == 'true'
         with:
           node-version: '22'
