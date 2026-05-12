@@ -7,7 +7,7 @@
 
 ---
 
-Korean general-news and economy-leaning YouTube digest. Every morning at 7 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Gemini, and publishes a new child page under your configured Notion page.
+Korean general-news and economy-leaning YouTube digest. Every morning at 7 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Anthropic Claude (Sonnet 4.6), and publishes a new child page under your configured Notion page.
 
 ## What It Watches
 
@@ -57,7 +57,7 @@ Manual workflows are also available:
 
    | Name | Value |
    | --- | --- |
-   | `GEMINI_API_KEY` | Google AI Studio / Gemini API key |
+   | `ANTHROPIC_API_KEY` *or* `CLAUDE_CODE_OAUTH_TOKEN` | Anthropic API key (`sk-ant-...`) or Claude Code OAuth token |
    | `NOTION_TOKEN` | Notion integration token |
    | `NOTION_PAGE_ID` | Parent Notion page ID for News Digest |
    | `YOUTUBE_COOKIES_B64` | Base64 YouTube cookies for yt-dlp |
@@ -68,11 +68,11 @@ Manual workflows are also available:
 
    | Name | Default |
    | --- | --- |
-   | `GEMINI_MODEL` | `gemini-3-fast` preferred; falls back automatically if unavailable |
+   | `CLAUDE_MODEL` | `claude-sonnet-4-6` preferred; falls back to `claude-haiku-4-5` if unavailable |
 
-   If Google exposes the model under a different exact ID in your account, set `GEMINI_MODEL` to that ID. If the preferred model is unavailable, the script automatically tries `gemini-3-flash-preview`, `gemini-2.5-flash`, `gemini-2.0-flash`, then `gemini-1.5-flash`.
+   Override the chain via `CLAUDE_FALLBACK_MODELS` (comma-separated). The script prefers `ANTHROPIC_API_KEY` when present and otherwise uses `CLAUDE_CODE_OAUTH_TOKEN` against the Anthropic Messages API.
 
-   When yt-dlp cannot collect transcript segments, `npm run summarize` also asks Gemini to inspect a small number of public YouTube URLs directly and produce timestamp notes. The default `GEMINI_YOUTUBE_FALLBACK_LIMIT` is `2` to avoid free-tier video-token quota failures. Disable with `GEMINI_YOUTUBE_FALLBACK=false`, or raise the limit if your Gemini quota supports larger daily batches.
+   The legacy Gemini-based summarizer is kept as `npm run summarize:gemini` for ad-hoc comparison; it requires `GEMINI_API_KEY`.
 
 3. In Notion, share the News Digest page with the same integration used by `NOTION_TOKEN`.
 
@@ -83,7 +83,7 @@ Manual workflows are also available:
 ```bash
 npm run collect        # yesterday's videos
 npm run collect:week   # last 7 days
-npm run summarize      # generate tmp/summaries-*.md with Gemini
+npm run summarize      # generate tmp/summaries-*.md with Claude
 npm run review         # validate latest tmp/summaries-*.md
 npm run publish        # write output/ and publish to Notion if env vars are set
 ```
@@ -108,6 +108,7 @@ In PowerShell, quote the handle: `--channel '@3protv'`.
 │   └── keywords.txt
 ├── scripts/
 │   ├── collect.js
+│   ├── summarize-claude.js
 │   ├── summarize-gemini.js
 │   ├── review.js
 │   └── publish.js
