@@ -13,6 +13,7 @@ const tmpDir = path.join(ROOT, 'tmp');
 
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const requestedModel = process.env.GEMINI_MODEL || 'gemini-3-fast';
+const geminiRequestTimeoutMs = Math.max(30000, parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '180000', 10) || 180000);
 const fallbackModels = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3-flash-preview,gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash')
   .split(',')
   .map(modelName => modelName.trim())
@@ -45,6 +46,16 @@ console.log(`Summarizing ${path.basename(rawFile)} with Gemini model preference:
 const enrichedRawItems = await enrichWithGeminiVideoTimestamps(rawItems);
 const videoSummaries = [];
 
+if (enrichedRawItems.length === 0) {
+  const markdown = `${title}
+
+수집 조건에 맞는 공개 영상이 없습니다.
+`;
+  fs.writeFileSync(outputFile, markdown);
+  console.log(`Saved empty digest: ${outputFile}`);
+  process.exit(0);
+}
+
 for (let i = 0; i < enrichedRawItems.length; i++) {
   const video = enrichedRawItems[i];
   console.log(`Summarizing video ${i + 1}/${enrichedRawItems.length}: ${video.title || video.videoId}`);
@@ -59,9 +70,6 @@ console.log(`Saved: ${outputFile}`);
 
 async function summarizeVideo(video, index, total) {
   const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
-  if (isInsufficientVideo(video)) {
-    return unavailableVideoMarkdown(video, videoUrl);
-  }
 
   const prompt = `You are writing one Korean YouTube video summary for a morning news digest.
 
@@ -72,12 +80,13 @@ Output requirements:
 - Start with exactly one h2 video heading: ## [한국어 영상 제목](${videoUrl})
 - The first sentence after **핵심 요약** must NOT restate the video title. Start with the speaker, issue, claim, or data point instead.
 - Do NOT include a digest title, channel heading, upload date, view count, duration, or transcript indicator.
-- Section order: **한 줄 인사이트** → **핵심 요약** → optional **주요 타임라인**.
+- Section order: **한 줄 인사이트** → **핵심 요약** → **주요 타임라인** when transcriptSegments or geminiTimestampNotes exist.
 - 핵심 요약 = intro 1-2 sentences + 3-5 numbered points with bold sub-headings. Each point has 1-3 sub-bullets.
 - Use concrete names/companies/stocks/sectors/numbers/years from the transcript, description, or geminiTimestampNotes.
-- If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS).
-- If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use those notes for at least 3 inline timestamp links.
-- If both transcriptSegments and geminiTimestampNotes are empty, do not invent timestamps and omit 주요 타임라인.
+- If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS), and include a **주요 타임라인** section with 3-6 linked entries.
+- If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use those notes for at least 3 inline timestamp links and include a **주요 타임라인** section with 3-6 linked entries.
+- If both transcriptSegments and geminiTimestampNotes are empty, summarize from the available title and description only. Be conservative, clearly say when details are not available, do not invent timestamps, and omit 주요 타임라인.
+- Use exactly one inline timestamp per bullet. Two timestamps beside each other are not a range; avoid adjacent timestamp links like [03:07](...) [05:40](...). Put extra moments in 주요 타임라인 instead.
 - No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
 
 Teaser-resolution requirements, very important:
@@ -96,55 +105,109 @@ ${guidance}
 video JSON:
 ${JSON.stringify(video, null, 2)}`;
 
-  const response = await callGeminiWithFallback(prompt);
-  let markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
+  let markdown;
+  try {
+    markdown = normalizeVideoMarkdown(cleanMarkdown(await callGeminiTextWithFallback(prompt)), video);
 
-  if (hasResolvableTeaserPlaceholder(markdown)) {
-    console.log(`Retrying teaser resolution for: ${video.title || video.videoId}`);
-    const retryResponse = await callGeminiWithFallback(`${prompt}
+    if (hasResolvableTeaserPlaceholder(markdown)) {
+      console.log(`Retrying teaser resolution for: ${video.title || video.videoId}`);
+      const retryText = await callGeminiTextWithFallback(`${prompt}
 
 Previous markdown still contained unresolved teaser wording such as 이 주식, 이 종목, or 이 섹터:
 ${markdown}
 
 Rewrite the same markdown, preserving the required format, but replace every unresolved teaser phrase with the actual named stock/company/sector from the video JSON. If the video never reveals it, write "영상에서 구체명은 공개하지 않음".`);
-    markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(retryResponse)), video);
+      markdown = normalizeVideoMarkdown(cleanMarkdown(retryText), video);
+    }
+  } catch (err) {
+    console.warn(`Gemini summary fallback for ${video.videoId}: ${err.message}`);
+    markdown = buildFallbackVideoMarkdown(video);
   }
 
   return markdown;
 }
 
+function buildFallbackVideoMarkdown(video) {
+  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+  const title = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
+  const description = neutralizeFallbackTeasers(firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.');
+  const segments = selectFallbackTimelineSegments(video);
+
+  const lines = [
+    `## [${title}](${videoUrl})`,
+    '',
+    '**한 줄 인사이트**',
+    '',
+    `${description}`,
+    '',
+    '**핵심 요약**',
+    '',
+    'Gemini 응답이 제한되어 제목, 설명, 자막 조각을 기준으로 확인 가능한 내용만 보수적으로 정리했습니다.',
+    '',
+    description
+  ];
+
+  if (segments.length >= 3) {
+    lines.push('', `자막에서 의미가 비교적 분명한 구간은 [${formatCompactTimestamp(segments[0].seconds)}](${videoUrl}&t=${segments[0].seconds})부터 확인할 수 있습니다.`);
+    lines.push('', '**주요 타임라인**', '');
+    for (const segment of segments) {
+      lines.push(`- [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
+    }
+  } else {
+    lines.push('', '자막 조각이 충분하지 않아 제목과 설명 중심으로만 요약했습니다.');
+  }
+
+  return lines.join('\n').trim();
+}
+
+function selectFallbackTimelineSegments(video) {
+  const rawSegments = (video.transcriptSegments || [])
+    .map(segment => ({ seconds: segmentStartSeconds(segment.start), text: cleanSentence(segment.text) }))
+    .filter(segment => Number.isFinite(segment.seconds) && isUsefulTimelineText(segment.text));
+
+  if (rawSegments.length <= 6) return rawSegments;
+
+  const targetCount = Math.min(6, Math.max(3, Math.ceil(rawSegments.length / 80)));
+  const firstContentIndex = rawSegments.findIndex(segment => segment.seconds >= 30);
+  const candidates = rawSegments.slice(firstContentIndex >= 0 ? firstContentIndex : 0);
+  const selected = [];
+  const minGapSeconds = 90;
+  const stride = Math.max(1, Math.floor(candidates.length / targetCount));
+
+  for (let index = 0; index < candidates.length && selected.length < targetCount; index += stride) {
+    const segment = candidates[index];
+    if (selected.every(existing => Math.abs(existing.seconds - segment.seconds) >= minGapSeconds)) {
+      selected.push(segment);
+    }
+  }
+
+  for (const segment of candidates) {
+    if (selected.length >= targetCount) break;
+    if (selected.every(existing => Math.abs(existing.seconds - segment.seconds) >= minGapSeconds)) {
+      selected.push(segment);
+    }
+  }
+
+  return selected.sort((left, right) => left.seconds - right.seconds).slice(0, 6);
+}
+
+function isUsefulTimelineText(text) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (normalized.length < 12) return false;
+  if (/^(네|예|음|어|자|그|이제|근데|그래서|그리고|아니|맞습니다|그렇죠)[\s,.?!]*$/i.test(normalized)) return false;
+  if (/^(구독|좋아요|알림|댓글|촬영일시|출연 신청|광고 문의|도서 구매)/.test(normalized)) return false;
+  return /[가-힣A-Za-z0-9]/.test(normalized);
+}
+
+function neutralizeFallbackTeasers(text) {
+  return String(text || '')
+    .replace(/(?:'|"|‘|“)?이 주식(?:'|"|’|”)?/g, '영상에서 구체명은 공개하지 않음')
+    .replace(/(?:'|"|‘|“)?이 종목(?:'|"|’|”)?/g, '영상에서 구체명은 공개하지 않음')
+    .replace(/(?:'|"|‘|“)?이 섹터(?:'|"|’|”)?/g, '영상에서 구체 섹터명은 공개하지 않음');
+}
+
 function hasResolvableTeaserPlaceholder(markdown) {
   return /(?:'|"|‘|“)?(이 주식|이 종목|이 섹터)(?:'|"|’|”)?/.test(markdown) && !/영상에서 구체명은 공개하지 않음/.test(markdown);
-}
-
-function isInsufficientVideo(video) {
-  const sourceText = [video.transcript, video.description]
-    .filter(Boolean)
-    .join('\n')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const hasSegments = (video.transcriptSegments || []).length >= 3;
-  const hasTimestampNotes = (video.geminiTimestampNotes || []).length >= 3;
-  return !hasSegments && !hasTimestampNotes && sourceText.length < 300;
-}
-
-function unavailableVideoMarkdown(video, videoUrl) {
-  const fallbackTitle = String(video.title || '내용 부족 영상')
-    .replace(/[\[\]\n]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return `## [${fallbackTitle}](${videoUrl})
-
-**한 줄 인사이트**
-💡 자막과 설명이 충분하지 않아 신뢰할 수 있는 요약을 만들 수 없습니다.
-
-**핵심 요약**
-이 영상은 자막, 설명, Gemini timestamp notes가 충분하지 않아 핵심 내용을 검증할 수 없습니다.
-
-1. **내용 부족**
-   - 영상에서 구체적인 발언, 종목, 수치, 정책 내용을 확인할 수 없어 요약을 보류합니다.
-   - 멤버십 전용, 비공개, 자막 미제공, 또는 설명 부족 영상일 가능성이 있습니다.`;
 }
 
 function normalizeVideoMarkdown(markdown, video) {
@@ -211,6 +274,26 @@ async function callGeminiWithFallback(text) {
   throw new Error(`No configured Gemini model worked. Tried: ${modelsToTry.join(', ')}\n${errors.join('\n')}`);
 }
 
+async function callGeminiTextWithFallback(text) {
+  const errors = [];
+
+  for (const model of modelsToTry) {
+    console.log(`Trying Gemini model: ${model}`);
+    try {
+      const response = await callGemini(model, text);
+      const responseText = extractText(response);
+      console.log(`Using Gemini model: ${model}`);
+      return responseText;
+    } catch (err) {
+      errors.push(`${model}: ${err.message}`);
+      if (!isRetryableGeminiTextError(err)) throw err;
+      console.warn(`Gemini text response failed, trying fallback: ${model} (${err.message.slice(0, 160)})`);
+    }
+  }
+
+  throw new Error(`No configured Gemini model returned usable text. Tried: ${modelsToTry.join(', ')}\n${errors.join('\n')}`);
+}
+
 async function enrichWithGeminiVideoTimestamps(items) {
   if (process.env.GEMINI_YOUTUBE_FALLBACK === 'false') return items;
 
@@ -273,6 +356,7 @@ Return JSON only, no markdown, with this exact shape:
 Requirements:
 - Create 5 to 8 notes when possible.
 - Use timestamps that actually correspond to the video.
+- Every seconds value must be within the video duration: ${Number.isFinite(video.duration) ? `${video.duration} seconds` : 'unknown'}.
 - Keep labels factual and specific: names, numbers, companies, policies, or claims.
 - Do not add generic advice.
 - Video title: ${video.title || ''}`;
@@ -281,7 +365,7 @@ Requirements:
     { file_data: { file_uri: videoUrl } },
     { text }
   ]);
-  return normalizeTimestampNotes(extractJsonObject(extractText(response)).notes || [], video.videoId);
+  return normalizeTimestampNotes(extractJsonObject(extractText(response)).notes || [], video.videoId, video.duration);
 }
 
 async function callGemini(model, text, parts = [{ text }]) {
@@ -289,6 +373,7 @@ async function callGemini(model, text, parts = [{ text }]) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(geminiRequestTimeoutMs),
     body: JSON.stringify({
       contents: [
         {
@@ -321,12 +406,14 @@ function extractJsonObject(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-function normalizeTimestampNotes(notes, videoId) {
+function normalizeTimestampNotes(notes, videoId, duration) {
+  const maxSeconds = Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : null;
   return notes
     .map(note => {
       const seconds = Number.isFinite(note.seconds) ? Math.max(0, Math.floor(note.seconds)) : parseTimestamp(note.time);
       const label = String(note.label || '').replace(/\s+/g, ' ').trim();
       if (!Number.isFinite(seconds) || !label) return null;
+      if (maxSeconds !== null && seconds > maxSeconds) return null;
       return {
         time: formatCompactTimestamp(seconds),
         seconds,
@@ -344,6 +431,26 @@ function parseTimestamp(value) {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   return NaN;
+}
+
+function segmentStartSeconds(value) {
+  if (Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  return parseTimestamp(value);
+}
+
+function firstUsefulSentence(text) {
+  const cleaned = cleanSentence(text);
+  if (!cleaned) return '';
+  return cleaned.split(/(?<=[.!?。！？])\s+/).find(sentence => sentence.length >= 12) || cleaned.slice(0, 180);
+}
+
+function cleanSentence(text) {
+  return String(text || '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[#>*_`\[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 220);
 }
 
 function formatCompactTimestamp(seconds) {
@@ -364,6 +471,13 @@ function isQuotaError(err) {
 
 function isVideoInputModelError(err) {
   return /file[_ ]?data|video|youtube|unsupported|not supported/i.test(err?.body || err?.message || '');
+}
+
+function isRetryableGeminiTextError(err) {
+  return isMissingModelError(err) ||
+    isQuotaError(err) ||
+    (Number.isFinite(err?.status) && err.status >= 500) ||
+    /Gemini response did not contain text/i.test(err?.message || '');
 }
 
 function extractText(response) {
