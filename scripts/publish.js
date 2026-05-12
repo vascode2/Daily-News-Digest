@@ -20,6 +20,7 @@ if (!summariesFile) {
 
 const key = path.basename(summariesFile).replace(/^summaries-/, '').replace(/\.md$/, '');
 const reportFile = path.join(tmpDir, `review-report-${key}.json`);
+const rawFile = path.join(tmpDir, `raw-${key}.json`);
 const outputFile = path.join(outputDir, `${key}.md`);
 
 const isRange = key.includes('_to_');
@@ -48,6 +49,32 @@ const compareMethod = (process.env.DIGEST_COMPARE_METHOD || '').trim();
 const channelCount = (summaries.match(/^###\s+📺\s+/gm) || []).length;
 const videoCount = (summaries.match(/^##\s+\[/gm) || []).length;
 
+// Pipeline stats: collected (raw), summarized (videoCount), fallback summaries, errors/warnings
+let collectedCount = 0;
+let collectedChannels = 0;
+if (fs.existsSync(rawFile)) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(rawFile, 'utf8'));
+    if (Array.isArray(raw)) {
+      collectedCount = raw.length;
+      collectedChannels = new Set(raw.map(v => v.channel || v.channelName).filter(Boolean)).size;
+    }
+  } catch { /* ignore raw read errors */ }
+}
+const fallbackCount = (summaries.match(/Gemini 응답이 제한되어/g) || []).length;
+const reviewErrors = report.errors || 0;
+const reviewWarnings = report.warnings || 0;
+
+const statsParts = [];
+if (collectedCount) statsParts.push(`수집: ${collectedCount}개${collectedChannels ? ` (${collectedChannels}채널)` : ''}`);
+statsParts.push(`요약 성공: ${videoCount - fallbackCount}개`);
+if (fallbackCount) statsParts.push(`Fallback: ${fallbackCount}개`);
+const dropped = Math.max(0, collectedCount - videoCount);
+if (dropped) statsParts.push(`누락: ${dropped}개`);
+if (reviewErrors) statsParts.push(`⚠️ 오류: ${reviewErrors}건`);
+if (reviewWarnings) statsParts.push(`경고: ${reviewWarnings}건`);
+const statsLine = statsParts.length ? `\n> ${statsParts.join(' | ')}` : '';
+
 const titleHeading = isChannel
   ? `# 📺 Channel News Digest — @${channelHandle} (${formatDateKo(endStr)})`
   : isRange
@@ -56,7 +83,7 @@ const titleHeading = isChannel
 
 const header = `${titleHeading}
 
-> 생성: ${timeStr} | 채널: ${channelCount}개 | 영상: ${videoCount}개${report.errors > 0 ? ` | ⚠️ 리뷰 오류: ${report.errors}건` : ''}
+> 생성: ${timeStr} | 채널: ${channelCount}개 | 영상: ${videoCount}개${statsLine}
 ${compareMethod ? `> 비교 방식: ${compareMethod}\n` : ''}
 
 ---
