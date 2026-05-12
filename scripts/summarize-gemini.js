@@ -224,6 +224,9 @@ function normalizeVideoMarkdown(markdown, video) {
   let keptVideoH2 = false;
   const filtered = lines.filter(line => {
     if (!/^##\s+/.test(line)) return true;
+    // Only treat H2 lines that contain a markdown link as candidate video-title headings.
+    // Plain ## Section lines inside the body must be preserved.
+    if (!/\[.+\]\(.+\)/.test(line)) return true;
     if (!keptVideoH2 && line.includes(`watch?v=${video.videoId}`)) {
       keptVideoH2 = true;
       return true;
