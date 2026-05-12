@@ -22,9 +22,9 @@ jobs:
       - name: Check 7 AM local time
         id: gate
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Manual run: proceeding."
+            echo "Manual or push verification run: proceeding."
             exit 0
           fi
 
