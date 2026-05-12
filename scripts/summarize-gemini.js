@@ -107,18 +107,17 @@ ${JSON.stringify(video, null, 2)}`;
 
   let markdown;
   try {
-    const response = await callGeminiWithFallback(prompt);
-    markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
+    markdown = normalizeVideoMarkdown(cleanMarkdown(await callGeminiTextWithFallback(prompt)), video);
 
     if (hasResolvableTeaserPlaceholder(markdown)) {
       console.log(`Retrying teaser resolution for: ${video.title || video.videoId}`);
-      const retryResponse = await callGeminiWithFallback(`${prompt}
+      const retryText = await callGeminiTextWithFallback(`${prompt}
 
 Previous markdown still contained unresolved teaser wording such as 이 주식, 이 종목, or 이 섹터:
 ${markdown}
 
 Rewrite the same markdown, preserving the required format, but replace every unresolved teaser phrase with the actual named stock/company/sector from the video JSON. If the video never reveals it, write "영상에서 구체명은 공개하지 않음".`);
-      markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(retryResponse)), video);
+      markdown = normalizeVideoMarkdown(cleanMarkdown(retryText), video);
     }
   } catch (err) {
     console.warn(`Gemini summary fallback for ${video.videoId}: ${err.message}`);
@@ -273,6 +272,26 @@ async function callGeminiWithFallback(text) {
   }
 
   throw new Error(`No configured Gemini model worked. Tried: ${modelsToTry.join(', ')}\n${errors.join('\n')}`);
+}
+
+async function callGeminiTextWithFallback(text) {
+  const errors = [];
+
+  for (const model of modelsToTry) {
+    console.log(`Trying Gemini model: ${model}`);
+    try {
+      const response = await callGemini(model, text);
+      const responseText = extractText(response);
+      console.log(`Using Gemini model: ${model}`);
+      return responseText;
+    } catch (err) {
+      errors.push(`${model}: ${err.message}`);
+      if (!isRetryableGeminiTextError(err)) throw err;
+      console.warn(`Gemini text response failed, trying fallback: ${model} (${err.message.slice(0, 160)})`);
+    }
+  }
+
+  throw new Error(`No configured Gemini model returned usable text. Tried: ${modelsToTry.join(', ')}\n${errors.join('\n')}`);
 }
 
 async function enrichWithGeminiVideoTimestamps(items) {
@@ -452,6 +471,13 @@ function isQuotaError(err) {
 
 function isVideoInputModelError(err) {
   return /file[_ ]?data|video|youtube|unsupported|not supported/i.test(err?.body || err?.message || '');
+}
+
+function isRetryableGeminiTextError(err) {
+  return isMissingModelError(err) ||
+    isQuotaError(err) ||
+    (Number.isFinite(err?.status) && err.status >= 500) ||
+    /Gemini response did not contain text/i.test(err?.message || '');
 }
 
 function extractText(response) {

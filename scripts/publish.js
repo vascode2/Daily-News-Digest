@@ -39,12 +39,7 @@ fs.mkdirSync(outputDir, { recursive: true });
 // Display timestamp in DIGEST_TIMEZONE (set in workflow), or local TZ if unset
 const now = new Date();
 const displayTz = process.env.DIGEST_TIMEZONE || undefined;
-const timeStr = now.toLocaleTimeString('ko-KR', {
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: displayTz,
-  timeZoneName: 'short'
-});
+const timeStr = formatGeneratedTime(now, displayTz);
 const report = fs.existsSync(reportFile) ? JSON.parse(fs.readFileSync(reportFile, 'utf8')) : {};
 const summaries = fs.readFileSync(summariesFile, 'utf8');
 
@@ -204,6 +199,19 @@ async function tryUpdateParentPageTitle(pageId, targetTitle, token) {
 function formatDateKo(dateStr) {
   const [y, m, d] = dateStr.split('-');
   return `${y}.${m}.${d}`;
+}
+
+function formatGeneratedTime(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone,
+    timeZoneName: 'short'
+  }).formatToParts(date);
+
+  const value = type => parts.find(part => part.type === type)?.value || '';
+  return `${value('dayPeriod')} ${value('hour')}:${value('minute')} ${value('timeZoneName')}`.trim();
 }
 
 function markdownToNotionBlocks(md) {
