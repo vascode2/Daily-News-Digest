@@ -227,12 +227,11 @@ async function fetchChannel(channelEntry) {
     url
   ], { timeout: 180000, maxBuffer: 200 * 1024 * 1024 });
 
-  let listResult = await fetchList();
+  let listResult = await fetchList(cookieArgs);
   if (cookieArgs.length > 0 && (listResult.status !== 0 || !listResult.stdout.trim())) {
-    push('  ↪️  Anonymous metadata fetch was empty/failed; retrying with cookies');
-    listResult = await fetchList(cookieArgs);
+    push('  ↪️  Authenticated metadata fetch was empty/failed; retrying without cookies');
+    listResult = await fetchList();
   }
-
   if (listResult.status !== 0 && !listResult.stdout) {
     const stderr = (listResult.stderr || '').split('\n').filter(Boolean).slice(0, 3).join(' | ');
     push(`  ❌ yt-dlp failed: ${stderr.slice(0, 400)}`);
@@ -299,14 +298,14 @@ async function fetchChannel(channelEntry) {
       videoUrl
     ], { timeout: 60000 });
 
-    await fetchSubtitles();
+    await fetchSubtitles(cookieArgs);
 
     let subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
       f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
     ));
 
     if (subtitleFiles.length === 0 && cookieArgs.length > 0) {
-      await fetchSubtitles(cookieArgs);
+      await fetchSubtitles();
       subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
         f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
       ));
