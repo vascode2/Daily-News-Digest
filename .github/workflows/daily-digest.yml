@@ -99,6 +99,15 @@ jobs:
           DIGEST_TIMEZONE: America/New_York
         run: npm run publish
 
+      - name: Upload tmp/ for diagnosis
+        if: always() && steps.gate.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-tmp-${{ github.run_number }}
+          path: tmp/
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Commit output back to repo
         if: steps.gate.outputs.should_run == 'true'
         run: |

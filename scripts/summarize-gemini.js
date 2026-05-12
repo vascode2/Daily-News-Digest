@@ -217,13 +217,22 @@ function normalizeVideoMarkdown(markdown, video) {
     .replace(/\n---\s*$/g, '')
     .trim();
 
-  // Detect any H2 line whose link target points at this video. This is more
-  // permissive than `\[[^\]]+\]` so that titles containing literal `[` or `]`
-  // (e.g. "[미방 풀영상]") still count as a valid heading and we don't double up.
-  const hasVideoH2 = cleaned.split('\n').some(line =>
-    /^##\s+/.test(line) && line.includes(`watch?v=${video.videoId}`)
-  );
-  if (!hasVideoH2) {
+  // Find the first H2 that links to this video. Drop every other H2 line —
+  // Gemini sometimes emits an extra unlinked `## [Title]` line in the body
+  // that turns into a duplicate heading.
+  const lines = cleaned.split('\n');
+  let keptVideoH2 = false;
+  const filtered = lines.filter(line => {
+    if (!/^##\s+/.test(line)) return true;
+    if (!keptVideoH2 && line.includes(`watch?v=${video.videoId}`)) {
+      keptVideoH2 = true;
+      return true;
+    }
+    return false;
+  });
+  cleaned = filtered.join('\n');
+
+  if (!keptVideoH2) {
     const fallbackTitle = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
     cleaned = `## [${fallbackTitle}](https://www.youtube.com/watch?v=${video.videoId})\n\n${cleaned}`;
   }
