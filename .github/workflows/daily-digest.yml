@@ -5,6 +5,14 @@ on:
     # GitHub cron is UTC only. Wake at both possible 7 AM America/New_York UTC
     # offsets, then gate below so only the true local 7 AM run proceeds.
     - cron: '0 11,12 * * *'
+  push:
+    branches: [compare-method-1-485e96b]
+    paths:
+      - '.github/workflows/daily-digest.yml'
+      - 'scripts/**'
+      - 'config/**'
+      - 'agents/**'
+      - 'package*.json'
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
@@ -18,9 +26,9 @@ jobs:
       - name: Check 7 AM local time
         id: gate
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Manual run: proceeding."
+            echo "Manual or push verification run: proceeding."
             exit 0
           fi
 
@@ -80,6 +88,8 @@ jobs:
           NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
           NOTION_ROOT_TITLE: News Digest
           DIGEST_TIMEZONE: America/New_York
+          DIGEST_COMPARE_METHOD: "1 - full rollback to 485e96b branch"
+          DIGEST_SKIP_NOTION: "true"
         run: npm run publish
 
       - name: Commit output back to repo

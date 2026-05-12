@@ -47,6 +47,7 @@ const timeStr = now.toLocaleTimeString('ko-KR', {
 });
 const report = fs.existsSync(reportFile) ? JSON.parse(fs.readFileSync(reportFile, 'utf8')) : {};
 const summaries = fs.readFileSync(summariesFile, 'utf8');
+const compareMethod = (process.env.DIGEST_COMPARE_METHOD || '').trim();
 
 // New format: channels are h3 with `### 📺 @handle`, videos are h2 with `## [Title](url)`
 const channelCount = (summaries.match(/^###\s+📺\s+/gm) || []).length;
@@ -61,6 +62,7 @@ const titleHeading = isChannel
 const header = `${titleHeading}
 
 > 생성: ${timeStr} | 채널: ${channelCount}개 | 영상: ${videoCount}개${report.errors > 0 ? ` | ⚠️ 리뷰 오류: ${report.errors}건` : ''}
+${compareMethod ? `> 비교 방식: ${compareMethod}\n` : ''}
 
 ---
 `;
@@ -83,10 +85,14 @@ console.log(`✅ Saved: ${outputFile}`);
 const notionToken = process.env.NOTION_TOKEN;
 const notionPageId = process.env.NOTION_PAGE_ID;
 const notionRootTitle = process.env.NOTION_ROOT_TITLE || 'News Digest';
+const skipNotion = process.env.DIGEST_SKIP_NOTION === 'true';
 
 let notionUrl = 'SKIPPED (no NOTION_TOKEN/NOTION_PAGE_ID set)';
 
-if (notionToken && notionPageId) {
+if (skipNotion) {
+  notionUrl = 'SKIPPED (DIGEST_SKIP_NOTION=true)';
+  console.log('📝 Notion skipped: DIGEST_SKIP_NOTION=true');
+} else if (notionToken && notionPageId) {
   console.log('📝 Publishing to Notion...');
   try {
     await tryUpdateParentPageTitle(notionPageId, notionRootTitle, notionToken);
