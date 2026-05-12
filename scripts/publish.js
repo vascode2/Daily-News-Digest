@@ -84,9 +84,13 @@ const notionToken = process.env.NOTION_TOKEN;
 const notionPageId = process.env.NOTION_PAGE_ID;
 const notionRootTitle = process.env.NOTION_ROOT_TITLE || 'News Digest';
 
-let notionUrl = 'SKIPPED (no NOTION_TOKEN/NOTION_PAGE_ID set)';
+let notionUrl = videoCount === 0
+  ? 'SKIPPED (empty digest: 0 videos)'
+  : 'SKIPPED (no NOTION_TOKEN/NOTION_PAGE_ID set)';
 
-if (notionToken && notionPageId) {
+if (videoCount === 0) {
+  console.log('📝 Notion skipped: empty digest has 0 videos');
+} else if (notionToken && notionPageId) {
   console.log('📝 Publishing to Notion...');
   try {
     await tryUpdateParentPageTitle(notionPageId, notionRootTitle, notionToken);
