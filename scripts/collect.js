@@ -191,10 +191,6 @@ const youtubeClientArgs = [
   '--extractor-args', 'youtube:player_client=default,web,android,ios,tv;lang=ko',
   '--add-header', 'Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
 ];
-const channelSource = (process.env.DIGEST_CHANNEL_SOURCE || 'yt-dlp').toLowerCase();
-if (!['yt-dlp', 'web', 'rss'].includes(channelSource)) {
-  console.warn(`Unknown DIGEST_CHANNEL_SOURCE "${channelSource}", falling back to yt-dlp`);
-}
 
 const PLAYLIST_END = mode === 'channel' ? limit : Math.max(50, days * 20);
 
@@ -219,15 +215,6 @@ async function fetchChannel(channelEntry) {
 
   push(`Fetching ${handle}${requiredKeywords.length ? ` (follow filter: ${requiredKeywords.join(', ')})` : ''}...`);
 
-  let videos = [];
-  const preferWeb = channelSource === 'web';
-  const preferRss = channelSource === 'rss';
-  if (preferWeb) {
-    videos = await fetchChannelPageVideos(handle, push);
-  } else if (preferRss) {
-    videos = await fetchRssVideos(handle, push);
-  }
-
   const fetchList = (authArgs = []) => runCommand('yt-dlp', [
     ...authArgs,
     '--dump-json',
@@ -240,42 +227,25 @@ async function fetchChannel(channelEntry) {
     url
   ], { timeout: 180000, maxBuffer: 200 * 1024 * 1024 });
 
-  if (videos.length === 0) {
-    if (preferWeb) push('  ↪️  Channel page parse empty/failed; retrying channel metadata with yt-dlp');
-    if (preferRss) push('  ↪️  RSS feed empty/failed; retrying channel metadata with yt-dlp');
-
-    let listResult = await fetchList();
-    if (cookieArgs.length > 0 && (listResult.status !== 0 || !listResult.stdout.trim())) {
-      push('  ↪️  Anonymous metadata fetch was empty/failed; retrying with cookies');
-      listResult = await fetchList(cookieArgs);
-    }
-
-    if (listResult.status !== 0 && !listResult.stdout) {
-      const stderr = (listResult.stderr || '').split('\n').filter(Boolean).slice(0, 3).join(' | ');
-      push(`  ⚠️  yt-dlp failed: ${stderr.slice(0, 400)}`);
-      videos = await fetchChannelPageVideos(handle, push);
-      if (videos.length === 0) videos = await fetchRssVideos(handle, push);
-      if (videos.length === 0) {
-        push(`  ❌ No usable channel metadata from yt-dlp, channel page, or RSS`);
-        return { handle, videos: out, log };
-      }
-    } else {
-      if (listResult.stderr && listResult.stderr.length > 0) {
-        const errLines = listResult.stderr.split('\n').filter(l => l.trim() && !l.includes('WARNING')).slice(0, 2).join(' | ');
-        if (errLines) push(`  ⚠️  yt-dlp stderr: ${errLines.slice(0, 300)}`);
-      }
-
-      videos = listResult.stdout.split('\n').filter(Boolean).map(l => {
-        try { return JSON.parse(l); } catch { return null; }
-      }).filter(Boolean);
-
-      if (videos.length === 0) {
-        push(`  ↪️  No videos in yt-dlp metadata response; retrying with channel page`);
-        videos = await fetchChannelPageVideos(handle, push);
-        if (videos.length === 0) videos = await fetchRssVideos(handle, push);
-      }
-    }
+  let listResult = await fetchList();
+  if (cookieArgs.length > 0 && (listResult.status !== 0 || !listResult.stdout.trim())) {
+    push('  ↪️  Anonymous metadata fetch was empty/failed; retrying with cookies');
+    listResult = await fetchList(cookieArgs);
   }
+
+  if (listResult.status !== 0 && !listResult.stdout) {
+    const stderr = (listResult.stderr || '').split('\n').filter(Boolean).slice(0, 3).join(' | ');
+    push(`  ❌ yt-dlp failed: ${stderr.slice(0, 400)}`);
+    return { handle, videos: out, log };
+  }
+  if (listResult.stderr && listResult.stderr.length > 0) {
+    const errLines = listResult.stderr.split('\n').filter(l => l.trim() && !l.includes('WARNING')).slice(0, 2).join(' | ');
+    if (errLines) push(`  ⚠️  yt-dlp stderr: ${errLines.slice(0, 300)}`);
+  }
+
+  const videos = listResult.stdout.split('\n').filter(Boolean).map(l => {
+    try { return JSON.parse(l); } catch { return null; }
+  }).filter(Boolean);
 
   if (videos.length === 0) {
     push(`  ⏭️  No videos in metadata response`);
@@ -395,225 +365,6 @@ async function fetchChannel(channelEntry) {
 
   if (matched === 0) push(`  ⏭️  No videos in range`);
   return { handle, videos: out, log };
-}
-
-async function fetchChannelPageVideos(handle, push) {
-  const cleanHandle = handle.startsWith('@') ? handle : `@${handle}`;
-  const pageUrl = `https://www.youtube.com/${cleanHandle}/videos`;
-  try {
-    const response = await fetchWithTimeout(pageUrl, {
-      headers: {
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-        'User-Agent': 'Mozilla/5.0'
-      }
-    }, 30000);
-    if (!response.ok) {
-      push(`  ⚠️  Channel page fetch failed: HTTP ${response.status}`);
-      return [];
-    }
-    const html = await response.text();
-    const videos = parseChannelPageVideos(html);
-    if (videos.length > 0) push(`  → Got ${videos.length} videos from channel page`);
-    return videos;
-  } catch (error) {
-    push(`  ⚠️  Channel page fetch failed: ${error.message}`);
-    return [];
-  }
-}
-
-function parseChannelPageVideos(html) {
-  const seen = new Set();
-  const videos = [];
-  const idMatches = [...html.matchAll(/"videoId":"([\w-]{11})"/g)];
-
-  for (const match of idMatches) {
-    const videoId = match[1];
-    if (seen.has(videoId)) continue;
-    seen.add(videoId);
-
-    const blockEnd = html.indexOf('"richItemRenderer"', match.index + 20);
-    const block = html.slice(match.index, blockEnd > match.index ? blockEnd : match.index + 30000);
-    const title = decodeJsonText(regexGroup(block, /"lockupMetadataViewModel":\{"title":\{"content":"((?:\\.|[^"\\])+)"/));
-    if (!title) continue;
-
-    const relativeTime = decodeJsonText(regexGroup(block, /"text":\{"content":"((?:\\.|[^"\\])*(?:분|시간|일|주|개월|년) 전)"/));
-    const uploadDate = relativeTimeToUploadDate(relativeTime);
-    if (!uploadDate) continue;
-
-    const durationText = decodeJsonText(regexGroup(block, /"thumbnailBadgeViewModel":\{"text":"([^"]+)"/));
-
-    videos.push({
-      id: videoId,
-      title,
-      upload_date: uploadDate,
-      channel: '',
-      uploader: '',
-      duration: durationTextToSeconds(durationText),
-      view_count: 0,
-      description: '',
-      availability: 'public'
-    });
-
-    if (videos.length >= PLAYLIST_END) break;
-  }
-
-  return videos;
-}
-
-function regexGroup(text, pattern) {
-  const match = text.match(pattern);
-  return match ? match[1] : '';
-}
-
-function decodeJsonText(value) {
-  if (!value) return '';
-  try {
-    return JSON.parse(`"${value}"`).replace(/\s+/g, ' ').trim();
-  } catch {
-    return String(value).replace(/\\u0026/g, '&').replace(/\s+/g, ' ').trim();
-  }
-}
-
-function relativeTimeToUploadDate(value) {
-  const text = String(value || '').trim();
-  const match = text.match(/(\d+)\s*(분|시간|일|주|개월|년) 전/);
-  if (!match) return '';
-
-  const amount = Number(match[1]);
-  if (!Number.isFinite(amount)) return '';
-
-  const date = new Date(Date.now() + tzOffsetMs);
-  const unit = match[2];
-  if (unit === '분') date.setUTCMinutes(date.getUTCMinutes() - amount);
-  else if (unit === '시간') date.setUTCHours(date.getUTCHours() - amount);
-  else if (unit === '일') date.setUTCDate(date.getUTCDate() - amount);
-  else if (unit === '주') date.setUTCDate(date.getUTCDate() - amount * 7);
-  else if (unit === '개월') date.setUTCMonth(date.getUTCMonth() - amount);
-  else if (unit === '년') date.setUTCFullYear(date.getUTCFullYear() - amount);
-
-  return date.toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function durationTextToSeconds(value) {
-  const parts = String(value || '').split(':').map(part => Number(part));
-  if (parts.some(part => !Number.isFinite(part))) return 0;
-  return parts.reduce((total, part) => total * 60 + part, 0);
-}
-
-async function fetchRssVideos(handle, push) {
-  const channelId = await resolveChannelId(handle, push);
-  if (!channelId) return [];
-
-  const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;
-  try {
-    const response = await fetchWithTimeout(rssUrl, {}, 30000);
-    if (!response.ok) {
-      push(`  ⚠️  RSS feed failed: HTTP ${response.status}`);
-      return [];
-    }
-    const xml = await response.text();
-    const videos = parseYoutubeRss(xml);
-    if (videos.length > 0) push(`  → Got ${videos.length} videos from RSS feed`);
-    return videos;
-  } catch (error) {
-    push(`  ⚠️  RSS feed failed: ${error.message}`);
-    return [];
-  }
-}
-
-async function resolveChannelId(handle, push) {
-  const cleanHandle = handle.startsWith('@') ? handle : `@${handle}`;
-  const urls = [
-    `https://www.youtube.com/${cleanHandle}`,
-    `https://www.youtube.com/${cleanHandle}/videos`
-  ];
-
-  for (const url of urls) {
-    try {
-      const response = await fetchWithTimeout(url, {
-        headers: {
-          'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-          'User-Agent': 'Mozilla/5.0'
-        }
-      }, 30000);
-      if (!response.ok) continue;
-      const html = await response.text();
-      const channelId = extractChannelId(html);
-      if (channelId) return channelId;
-    } catch {
-      // Try the next channel URL form.
-    }
-  }
-
-  push(`  ⚠️  Could not resolve RSS channel id for ${cleanHandle}`);
-  return '';
-}
-
-function extractChannelId(html) {
-  const patterns = [
-    /<meta[^>]+itemprop=["']channelId["'][^>]+content=["'](UC[^"']+)["']/,
-    /<meta[^>]+content=["'](UC[^"']+)["'][^>]+itemprop=["']channelId["']/,
-    /"channelId":"(UC[^"]+)"/,
-    /"externalId":"(UC[^"]+)"/,
-    /youtube\.com\/channel\/(UC[\w-]+)/
-  ];
-
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match) return match[1];
-  }
-  return '';
-}
-
-function parseYoutubeRss(xml) {
-  const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(match => match[1]);
-  return entries.map(entry => {
-    const videoId = xmlText(entry, 'yt:videoId');
-    const title = decodeXml(xmlText(entry, 'title'));
-    const published = xmlText(entry, 'published') || xmlText(entry, 'updated');
-    const channelName = decodeXml(xmlText(entry, 'name'));
-    const description = decodeXml(xmlText(entry, 'media:description'));
-    const uploadDate = published ? new Date(published).toISOString().slice(0, 10).replace(/-/g, '') : '';
-
-    if (!videoId || !uploadDate) return null;
-    return {
-      id: videoId,
-      title: title || 'Untitled',
-      upload_date: uploadDate,
-      channel: channelName,
-      uploader: channelName,
-      duration: 0,
-      view_count: 0,
-      description,
-      availability: 'public'
-    };
-  }).filter(Boolean);
-}
-
-function xmlText(xml, tagName) {
-  const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = xml.match(new RegExp(`<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escaped}>`));
-  return match ? match[1].replace(/^<!\[CDATA\[|\]\]>$/g, '').trim() : '';
-}
-
-function decodeXml(value) {
-  return String(value || '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
-}
-
-async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 function shouldSkipRestrictedVideo(video) {

@@ -63,7 +63,6 @@ jobs:
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
           DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
-          DIGEST_CHANNEL_SOURCE: web
         run: npm run collect
 
       - name: Summarize via Gemini
