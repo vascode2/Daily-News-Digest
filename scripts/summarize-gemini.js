@@ -105,21 +105,67 @@ ${guidance}
 video JSON:
 ${JSON.stringify(video, null, 2)}`;
 
-  const response = await callGeminiWithFallback(prompt);
-  let markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
+  let markdown;
+  try {
+    const response = await callGeminiWithFallback(prompt);
+    markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(response)), video);
 
-  if (hasResolvableTeaserPlaceholder(markdown)) {
-    console.log(`Retrying teaser resolution for: ${video.title || video.videoId}`);
-    const retryResponse = await callGeminiWithFallback(`${prompt}
+    if (hasResolvableTeaserPlaceholder(markdown)) {
+      console.log(`Retrying teaser resolution for: ${video.title || video.videoId}`);
+      const retryResponse = await callGeminiWithFallback(`${prompt}
 
 Previous markdown still contained unresolved teaser wording such as 이 주식, 이 종목, or 이 섹터:
 ${markdown}
 
 Rewrite the same markdown, preserving the required format, but replace every unresolved teaser phrase with the actual named stock/company/sector from the video JSON. If the video never reveals it, write "영상에서 구체명은 공개하지 않음".`);
-    markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(retryResponse)), video);
+      markdown = normalizeVideoMarkdown(cleanMarkdown(extractText(retryResponse)), video);
+    }
+  } catch (err) {
+    console.warn(`Gemini summary fallback for ${video.videoId}: ${err.message}`);
+    markdown = buildFallbackVideoMarkdown(video);
   }
 
   return markdown;
+}
+
+function buildFallbackVideoMarkdown(video) {
+  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+  const title = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
+  const description = firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.';
+  const segments = (video.transcriptSegments || [])
+    .map(segment => ({ seconds: segmentStartSeconds(segment.start), text: cleanSentence(segment.text) }))
+    .filter(segment => Number.isFinite(segment.seconds) && segment.text)
+    .slice(0, 6);
+
+  const lines = [
+    `## [${title}](${videoUrl})`,
+    '',
+    '**한 줄 인사이트**',
+    '',
+    `${description}`,
+    '',
+    '**핵심 요약**',
+    '',
+    'Gemini 응답이 제한되어 제목, 설명, 자막 조각을 기준으로 확인 가능한 내용만 보수적으로 정리했습니다.',
+    '',
+    '1. **영상의 핵심 주제**',
+    `   - ${description}`,
+    '2. **확인 가능한 발언 흐름**'
+  ];
+
+  if (segments.length >= 3) {
+    for (const segment of segments.slice(0, 3)) {
+      lines.push(`   - [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
+    }
+    lines.push('', '**주요 타임라인**', '');
+    for (const segment of segments.slice(0, 5)) {
+      lines.push(`- [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
+    }
+  } else {
+    lines.push('   - 자막 조각이 충분하지 않아 제목과 설명 중심으로만 요약했습니다.');
+  }
+
+  return lines.join('\n').trim();
 }
 
 function hasResolvableTeaserPlaceholder(markdown) {
@@ -327,6 +373,26 @@ function parseTimestamp(value) {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   return NaN;
+}
+
+function segmentStartSeconds(value) {
+  if (Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  return parseTimestamp(value);
+}
+
+function firstUsefulSentence(text) {
+  const cleaned = cleanSentence(text);
+  if (!cleaned) return '';
+  return cleaned.split(/(?<=[.!?。！？])\s+/).find(sentence => sentence.length >= 12) || cleaned.slice(0, 180);
+}
+
+function cleanSentence(text) {
+  return String(text || '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[#>*_`\[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 220);
 }
 
 function formatCompactTimestamp(seconds) {
