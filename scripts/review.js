@@ -72,6 +72,17 @@ for (const block of videoBlocks) {
     console.log(`  ❌ ERROR: "${title}" — transcriptSegments 있음에도 [자막 기반 타임라인 없음] 사용`);
   }
 
+  if (/Gemini 응답이 제한되어|자막 조각이 충분하지 않아 제목과 설명 중심으로만 요약했습니다/.test(block)) {
+    issues.push({
+      level: 'ERROR',
+      video: title,
+      check: 'gemini_fallback_summary',
+      detail: 'Gemini fallback summary was generated; do not publish low-confidence title/description-only output'
+    });
+    errorCount++;
+    console.log(`  ❌ ERROR: "${title}" — Gemini fallback summary generated`);
+  }
+
   for (const section of alwaysRequired) {
     if (!block.includes(section)) {
       issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section}` });
