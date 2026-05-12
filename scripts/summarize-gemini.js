@@ -69,9 +69,6 @@ console.log(`Saved: ${outputFile}`);
 
 async function summarizeVideo(video, index, total) {
   const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
-  if (isInsufficientVideo(video)) {
-    return unavailableVideoMarkdown(video, videoUrl);
-  }
 
   const prompt = `You are writing one Korean YouTube video summary for a morning news digest.
 
@@ -87,7 +84,7 @@ Output requirements:
 - Use concrete names/companies/stocks/sectors/numbers/years from the transcript, description, or geminiTimestampNotes.
 - If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS), and include a **주요 타임라인** section with 3-6 linked entries.
 - If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use those notes for at least 3 inline timestamp links and include a **주요 타임라인** section with 3-6 linked entries.
-- If both transcriptSegments and geminiTimestampNotes are empty, do not invent timestamps and omit 주요 타임라인.
+- If both transcriptSegments and geminiTimestampNotes are empty, summarize from the available title and description only. Be conservative, clearly say when details are not available, do not invent timestamps, and omit 주요 타임라인.
 - Use exactly one inline timestamp per bullet. Two timestamps beside each other are not a range; avoid adjacent timestamp links like [03:07](...) [05:40](...). Put extra moments in 주요 타임라인 instead.
 - No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
 
@@ -126,36 +123,6 @@ Rewrite the same markdown, preserving the required format, but replace every unr
 
 function hasResolvableTeaserPlaceholder(markdown) {
   return /(?:'|"|‘|“)?(이 주식|이 종목|이 섹터)(?:'|"|’|”)?/.test(markdown) && !/영상에서 구체명은 공개하지 않음/.test(markdown);
-}
-
-function isInsufficientVideo(video) {
-  const sourceText = [video.transcript, video.description]
-    .filter(Boolean)
-    .join('\n')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const hasSegments = (video.transcriptSegments || []).length >= 3;
-  const hasTimestampNotes = (video.geminiTimestampNotes || []).length >= 3;
-  return !hasSegments && !hasTimestampNotes && sourceText.length < 300;
-}
-
-function unavailableVideoMarkdown(video, videoUrl) {
-  const fallbackTitle = String(video.title || '내용 부족 영상')
-    .replace(/[\[\]\n]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return `## [${fallbackTitle}](${videoUrl})
-
-**한 줄 인사이트**
-💡 자막과 설명이 충분하지 않아 신뢰할 수 있는 요약을 만들 수 없습니다.
-
-**핵심 요약**
-이 영상은 자막, 설명, Gemini timestamp notes가 충분하지 않아 핵심 내용을 검증할 수 없습니다.
-
-1. **내용 부족**
-   - 영상에서 구체적인 발언, 종목, 수치, 정책 내용을 확인할 수 없어 요약을 보류합니다.
-   - 멤버십 전용, 비공개, 자막 미제공, 또는 설명 부족 영상일 가능성이 있습니다.`;
 }
 
 function normalizeVideoMarkdown(markdown, video) {

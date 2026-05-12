@@ -69,7 +69,7 @@ Tone:
 
 ## Rules
 - One section per channel, one subsection per video
-- If transcript is empty/very short (< 200 chars), write: `> 내용 부족 — 요약 불가 (자막/설명 없음)`
+- If transcript is empty/very short, summarize conservatively from title/description only, clearly saying when details are not available. Do not invent timestamps.
 - Timestamps must be in `[HH:MM:SS]` format
 - 주요 타임라인은 raw JSON의 `transcriptSegments` 또는 `geminiTimestampNotes`가 있는 경우 작성
 - `transcriptSegments`와 `geminiTimestampNotes`가 모두 없으면 주요 타임라인을 생략하고, 시간을 추정하지 않음

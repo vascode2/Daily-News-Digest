@@ -328,12 +328,6 @@ async function fetchChannel(channelEntry) {
       continue;
     }
 
-    const sourceText = `${transcript || ''}\n${video.description || ''}`.replace(/\s+/g, ' ').trim();
-    if (!hasTranscript && sourceText.length < 300) {
-      push(`  ⏭️  Skipped (insufficient text): ${video.title}`);
-      continue;
-    }
-
     const uploadDateStr = `${uploadDate.slice(0,4)}-${uploadDate.slice(4,6)}-${uploadDate.slice(6,8)}`;
 
     out.push({
