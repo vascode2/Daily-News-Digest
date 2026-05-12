@@ -79,11 +79,11 @@ jobs:
           DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
         run: npm run collect
 
-      - name: Summarize via Gemini
+      - name: Summarize via Claude
         if: steps.gate.outputs.should_run == 'true'
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-4-6' }}
         run: npm run summarize
 
       - name: Review summaries
