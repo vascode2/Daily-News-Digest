@@ -1,4 +1,5 @@
 name: '[AUTO] Daily News Digest'
+# trigger refresh
 
 # Trigger after YOUTUBE_COOKIES_B64 secret refresh (2026-05-12)
 on:
@@ -18,7 +19,7 @@ on:
   workflow_dispatch: {}  # Manual trigger from GitHub UI
 
 permissions:
-  contents: write  # output/ 커밋 권한
+  contents: write  # output/ ?????? ??????
 
 concurrency:
   group: daily-digest-${{ github.ref }}
