@@ -131,7 +131,7 @@ Rewrite the same markdown, preserving the required format, but replace every unr
 function buildFallbackVideoMarkdown(video) {
   const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
   const title = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
-  const description = firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.';
+  const description = neutralizeFallbackTeasers(firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.');
   const segments = (video.transcriptSegments || [])
     .map(segment => ({ seconds: segmentStartSeconds(segment.start), text: cleanSentence(segment.text) }))
     .filter(segment => Number.isFinite(segment.seconds) && segment.text)
@@ -166,6 +166,13 @@ function buildFallbackVideoMarkdown(video) {
   }
 
   return lines.join('\n').trim();
+}
+
+function neutralizeFallbackTeasers(text) {
+  return String(text || '')
+    .replace(/(?:'|"|‘|“)?이 주식(?:'|"|’|”)?/g, '영상에서 구체명은 공개하지 않음')
+    .replace(/(?:'|"|‘|“)?이 종목(?:'|"|’|”)?/g, '영상에서 구체명은 공개하지 않음')
+    .replace(/(?:'|"|‘|“)?이 섹터(?:'|"|’|”)?/g, '영상에서 구체 섹터명은 공개하지 않음');
 }
 
 function hasResolvableTeaserPlaceholder(markdown) {
