@@ -132,10 +132,7 @@ function buildFallbackVideoMarkdown(video) {
   const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
   const title = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
   const description = neutralizeFallbackTeasers(firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.');
-  const segments = (video.transcriptSegments || [])
-    .map(segment => ({ seconds: segmentStartSeconds(segment.start), text: cleanSentence(segment.text) }))
-    .filter(segment => Number.isFinite(segment.seconds) && segment.text)
-    .slice(0, 6);
+  const segments = selectFallbackTimelineSegments(video);
 
   const lines = [
     `## [${title}](${videoUrl})`,
@@ -148,24 +145,59 @@ function buildFallbackVideoMarkdown(video) {
     '',
     'Gemini 응답이 제한되어 제목, 설명, 자막 조각을 기준으로 확인 가능한 내용만 보수적으로 정리했습니다.',
     '',
-    '1. **영상의 핵심 주제**',
-    `   - ${description}`,
-    '2. **확인 가능한 발언 흐름**'
+    description
   ];
 
   if (segments.length >= 3) {
-    for (const segment of segments.slice(0, 3)) {
-      lines.push(`   - [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
-    }
+    lines.push('', `자막에서 의미가 비교적 분명한 구간은 [${formatCompactTimestamp(segments[0].seconds)}](${videoUrl}&t=${segments[0].seconds})부터 확인할 수 있습니다.`);
     lines.push('', '**주요 타임라인**', '');
-    for (const segment of segments.slice(0, 5)) {
+    for (const segment of segments) {
       lines.push(`- [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
     }
   } else {
-    lines.push('   - 자막 조각이 충분하지 않아 제목과 설명 중심으로만 요약했습니다.');
+    lines.push('', '자막 조각이 충분하지 않아 제목과 설명 중심으로만 요약했습니다.');
   }
 
   return lines.join('\n').trim();
+}
+
+function selectFallbackTimelineSegments(video) {
+  const rawSegments = (video.transcriptSegments || [])
+    .map(segment => ({ seconds: segmentStartSeconds(segment.start), text: cleanSentence(segment.text) }))
+    .filter(segment => Number.isFinite(segment.seconds) && isUsefulTimelineText(segment.text));
+
+  if (rawSegments.length <= 6) return rawSegments;
+
+  const targetCount = Math.min(6, Math.max(3, Math.ceil(rawSegments.length / 80)));
+  const firstContentIndex = rawSegments.findIndex(segment => segment.seconds >= 30);
+  const candidates = rawSegments.slice(firstContentIndex >= 0 ? firstContentIndex : 0);
+  const selected = [];
+  const minGapSeconds = 90;
+  const stride = Math.max(1, Math.floor(candidates.length / targetCount));
+
+  for (let index = 0; index < candidates.length && selected.length < targetCount; index += stride) {
+    const segment = candidates[index];
+    if (selected.every(existing => Math.abs(existing.seconds - segment.seconds) >= minGapSeconds)) {
+      selected.push(segment);
+    }
+  }
+
+  for (const segment of candidates) {
+    if (selected.length >= targetCount) break;
+    if (selected.every(existing => Math.abs(existing.seconds - segment.seconds) >= minGapSeconds)) {
+      selected.push(segment);
+    }
+  }
+
+  return selected.sort((left, right) => left.seconds - right.seconds).slice(0, 6);
+}
+
+function isUsefulTimelineText(text) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (normalized.length < 12) return false;
+  if (/^(네|예|음|어|자|그|이제|근데|그래서|그리고|아니|맞습니다|그렇죠)[\s,.?!]*$/i.test(normalized)) return false;
+  if (/^(구독|좋아요|알림|댓글|촬영일시|출연 신청|광고 문의|도서 구매)/.test(normalized)) return false;
+  return /[가-힣A-Za-z0-9]/.test(normalized);
 }
 
 function neutralizeFallbackTeasers(text) {
