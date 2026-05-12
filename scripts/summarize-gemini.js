@@ -45,6 +45,16 @@ console.log(`Summarizing ${path.basename(rawFile)} with Gemini model preference:
 const enrichedRawItems = await enrichWithGeminiVideoTimestamps(rawItems);
 const videoSummaries = [];
 
+if (enrichedRawItems.length === 0) {
+  const markdown = `${title}
+
+수집 조건에 맞는 공개 영상이 없습니다.
+`;
+  fs.writeFileSync(outputFile, markdown);
+  console.log(`Saved empty digest: ${outputFile}`);
+  process.exit(0);
+}
+
 for (let i = 0; i < enrichedRawItems.length; i++) {
   const video = enrichedRawItems[i];
   console.log(`Summarizing video ${i + 1}/${enrichedRawItems.length}: ${video.title || video.videoId}`);

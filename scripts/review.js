@@ -283,7 +283,10 @@ for (const [insight, titles] of insightToTitles.entries()) {
   }
 }
 
-if (!/###\s+📺\s+/.test(content)) {
+if (videoBlocks.length === 0) {
+  issues.push({ level: 'WARNING', check: 'no_videos', detail: 'No video summaries found; digest may be empty because all collected videos were filtered or unavailable' });
+  console.log('  ⚠️  WARNING: no video summaries found — treating as empty digest');
+} else if (!/###\s+📺\s+/.test(content)) {
   issues.push({ level: 'ERROR', check: 'structure', detail: 'No channel sections found (### 📺 ChannelName)' });
   errorCount++;
 }
