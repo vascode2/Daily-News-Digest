@@ -120,14 +120,14 @@ Rewrite the same markdown, preserving the required format, but replace every unr
       markdown = normalizeVideoMarkdown(cleanMarkdown(retryText), video);
     }
   } catch (err) {
-    console.warn(`Gemini summary fallback for ${video.videoId}: ${err.message}`);
-    markdown = buildFallbackVideoMarkdown(video);
+    console.warn(`Gemini summary fallback for ${video.videoId} (${video.title?.slice(0,60) || ''}): ${err.message}`);
+    markdown = buildFallbackVideoMarkdown(video, err);
   }
 
   return markdown;
 }
 
-function buildFallbackVideoMarkdown(video) {
+function buildFallbackVideoMarkdown(video, err = null) {
   const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
   const title = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
   const description = neutralizeFallbackTeasers(firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.');
@@ -159,7 +159,8 @@ function buildFallbackVideoMarkdown(video) {
     }
   } else {
     lines.push(`   - 자막 조각이 충분하지 않아 별도 타임라인은 제공되지 않습니다. 영상에서 직접 확인을 권장합니다.`);
-    lines.push('', `> ⚠️ Gemini 응답이 제한되어 자동 요약이 제한된 상태입니다.`);
+    const reasonHint = err?.message ? `  (사유: ${err.message.slice(0, 200).replace(/\r?\n/g, ' ')})` : '';
+    lines.push('', `> ⚠️ Gemini 응답이 제한되어 자동 요약이 제한된 상태입니다.${reasonHint}`);
   }
 
   return lines.join('\n').trim();
@@ -504,10 +505,24 @@ function isRetryableGeminiTextError(err) {
 }
 
 function extractText(response) {
-  const parts = response?.candidates?.[0]?.content?.parts || [];
+  const candidate = response?.candidates?.[0];
+  const parts = candidate?.content?.parts || [];
   const text = parts.map(part => part.text || '').join('\n').trim();
   if (!text) {
-    throw new Error(`Gemini response did not contain text: ${JSON.stringify(response).slice(0, 1000)}`);
+    // Surface the *reason* Gemini returned no text so we can diagnose
+    // safety blocks, MAX_TOKENS truncation, recitation, etc.
+    const finishReason = candidate?.finishReason || 'UNKNOWN';
+    const safety = (candidate?.safetyRatings || [])
+      .filter(r => r.blocked || r.probability === 'HIGH' || r.probability === 'MEDIUM')
+      .map(r => `${r.category}=${r.probability}${r.blocked ? '(blocked)' : ''}`)
+      .join(', ');
+    const promptBlock = response?.promptFeedback?.blockReason;
+    const reasons = [
+      `finishReason=${finishReason}`,
+      safety ? `safety=[${safety}]` : null,
+      promptBlock ? `promptBlocked=${promptBlock}` : null,
+    ].filter(Boolean).join(' | ');
+    throw new Error(`Gemini response had no text (${reasons})`);
   }
   return text;
 }
