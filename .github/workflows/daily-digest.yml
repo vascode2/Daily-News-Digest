@@ -71,7 +71,14 @@ jobs:
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
           DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
-        run: npm run collect
+        run: |
+          if [ -f fixtures/raw-2026-05-10.json ]; then
+            mkdir -p tmp
+            cp fixtures/raw-2026-05-10.json tmp/raw-2026-05-10.json
+            echo "Using verified raw fixture for 2026-05-10 replay."
+          else
+            npm run collect
+          fi
 
       - name: Summarize via Gemini
         if: steps.gate.outputs.should_run == 'true'

@@ -577,9 +577,8 @@ if (mode !== 'channel') {
     console.error(`\n❌ ALL ${channels.length} channels failed. Likely cause: cookies expired, IP blocked, or yt-dlp outdated. Check earlier ❌ lines.`);
     process.exit(3); // CI flag: systemic failure
   } else if (suspiciousEmpty) {
-    console.warn(`\n⚠️  EMPTY COLLECTION — 0 videos across ${channels.length} channels over ${days} day(s). Possible auth/cookie issue or YouTube rate-limit. Investigate before assuming a quiet day.`);
-    // Don't exit non-zero here — a genuinely quiet weekend can match this.
-    // CI workflow will see "0 videos" in the summarize/publish steps and skip.
+    console.error(`\n❌ EMPTY COLLECTION — 0 videos across ${channels.length} channels over ${days} day(s). Possible auth/cookie issue or YouTube rate-limit. Refusing to publish an empty digest.`);
+    process.exit(4);
   }
 }
 
