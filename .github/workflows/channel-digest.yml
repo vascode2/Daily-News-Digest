@@ -45,10 +45,13 @@ jobs:
             --channel "${{ inputs.channel }}" \
             --limit "${{ inputs.limit }}"
 
-      - name: Summarize via Gemini
+      - name: Summarize via Claude
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-4-6' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3-fast' }}
+          GEMINI_FALLBACK_MODELS: ${{ vars.GEMINI_FALLBACK_MODELS || 'gemini-3-fast,gemini-2.5-flash,gemini-2.5-flash-lite' }}
         run: npm run summarize
 
       - name: Review summaries
