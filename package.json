@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Daily Korean news and economy YouTube digest generator using Gemini",
   "scripts": {
-    "collect": "node --env-file-if-exists=.env scripts/collect.js",
+    "collect": "node --env-file-if-exists=.env scripts/collect.js --max-per-channel 3",
     "collect:week": "node --env-file-if-exists=.env scripts/collect.js --days 7 --max-per-channel 3",
     "collect:channel": "node --env-file-if-exists=.env scripts/collect.js --channel",
     "summarize": "node --env-file-if-exists=.env scripts/summarize-claude.js",
