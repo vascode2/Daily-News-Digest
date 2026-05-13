@@ -7,7 +7,7 @@
 
 ---
 
-Korean general-news and economy-leaning YouTube digest. Every morning at 7 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Anthropic Claude (Sonnet 4.6), and publishes a new child page under your configured Notion page.
+Korean general-news and economy-leaning YouTube digest. Every morning at 6:30 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Anthropic Claude (Sonnet 4.6), and publishes a new child page under your configured Notion page.
 
 ## What It Watches
 
@@ -37,8 +37,8 @@ Global filtering through [config/keywords.txt](config/keywords.txt) is still ava
 
 The daily workflow is [.github/workflows/daily-digest.yml](.github/workflows/daily-digest.yml).
 
-- Schedule: `0 11,12 * * *` with an in-workflow timezone gate
-- Time: exactly 7 AM in `America/New_York` year-round; GitHub cron wakes at both UTC offsets and skips the non-7 AM run
+- Schedule: `30 10,11 * * *` with an in-workflow timezone gate
+- Time: exactly 6:30 AM in `America/New_York` year-round; GitHub cron wakes at both UTC offsets and skips the non-6:30 AM run
 - Notion parent page: stored privately as the `NOTION_PAGE_ID` GitHub secret
 
 Manual workflows are also available:
