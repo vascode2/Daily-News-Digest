@@ -1,17 +1,17 @@
 # Daily News Digest — Project Guide
 
 ## Purpose
-Automatically collect, summarize, and publish Korean general-news and economy-leaning YouTube summaries every morning. Summarization runs through the Gemini API from `scripts/summarize-gemini.js`.
+Automatically collect, summarize, and publish Korean general-news and economy-leaning YouTube summaries every morning. Summarization runs through the Anthropic Claude API from `scripts/summarize-claude.js` (default model: `claude-sonnet-4-6`, fallback `claude-haiku-4-5`).
 
 ## Tech Stack
 - Runtime: Node.js v22+
 - YouTube data: yt-dlp (CLI tool)
-- AI summarization: Gemini API via `scripts/summarize-gemini.js`
+- AI summarization: Anthropic Claude API via `scripts/summarize-claude.js` (legacy `scripts/summarize-gemini.js` retained for ad-hoc use)
 - Output: Markdown files + optional Notion API
 
 ## Workflow Overview
 1. **Collect** (Node script) — yt-dlp fetches yesterday's videos + transcripts
-2. **Summarize** (Node script + Gemini) — reads raw JSON, writes summaries following `config/format.md`
+2. **Summarize** (Node script + Claude) — reads raw JSON, writes summaries following `config/format.md`
 3. **Review** (Node script) — Validates structure and auto-fixes formatting
 4. **Publish** (Node script) — Saves to `output/YYYY-MM-DD.md` and optionally Notion
 
@@ -37,7 +37,7 @@ Creates `tmp/raw-{key}.json` where key is either `YYYY-MM-DD` or `YYYY-MM-DD_to_
 ```bash
 npm run summarize
 ```
-Reads the latest `tmp/raw-{key}.json`, `config/format.md`, and `agents/summarizer.md`, then writes `tmp/summaries-{key}.md` using Gemini.
+Reads the latest `tmp/raw-{key}.json`, `config/format.md`, and `agents/summarizer.md`, then writes `tmp/summaries-{key}.md` using Claude (Sonnet 4.6 by default). To force the legacy Gemini path, run `npm run summarize:gemini` instead.
 
 ### Step 3: Review
 ```bash
@@ -63,15 +63,22 @@ Tell the user the output file path, channel/video counts, and any errors.
 - `config/format.md` — Required output format for each summary
 - `config/keywords.txt` — Optional: only include videos matching these keywords
 
-## Environment Variables (optional)
+## Environment Variables
 ```
-NOTION_TOKEN=secret_...       # Optional: enables Notion publishing
+ANTHROPIC_API_KEY=sk-ant-...                   # Required for npm run summarize (or CLAUDE_CODE_OAUTH_TOKEN)
+CLAUDE_MODEL=claude-sonnet-4-6                 # Optional preferred model; falls back to claude-haiku-4-5
+CLAUDE_FALLBACK_MODELS=...                     # Optional comma-separated override of the Claude fallback chain
+CLAUDE_INTER_REQUEST_DELAY_MS=2000             # Optional: delay between videos to stay under per-minute token limits
+CLAUDE_TRANSIENT_MAX_RETRIES=2                 # Optional: per-model retries on 429/529/5xx with exponential backoff
+CLAUDE_TRANSIENT_BACKOFF_MS=5000               # Optional: base backoff (doubles each retry)
+GEMINI_API_KEY=your_gemini_api_key             # Optional: enables Gemini fallback after all Claude models fail
+GEMINI_FALLBACK_MODELS=gemini-3-fast,gemini-2.5-flash,gemini-2.5-flash-lite  # Optional override for Gemini fallback chain
+NOTION_TOKEN=secret_...                        # Optional: enables Notion publishing
 NOTION_PAGE_ID=your_32_character_notion_page_id  # News Digest parent page
-GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-3-fast    # Optional preferred model; script falls back if unavailable
-GEMINI_YOUTUBE_FALLBACK=true  # Optional: use Gemini YouTube URL input when transcripts are missing
+GEMINI_MODEL=gemini-2.5-flash                  # Optional; only used by the legacy npm run summarize:gemini script
+GEMINI_YOUTUBE_FALLBACK=true                   # Optional: legacy Gemini path can fall back to YouTube URL input
 ```
-**No ANTHROPIC_API_KEY needed** — summarization runs through Gemini.
+The active summarizer is Anthropic Claude (Sonnet 4.6 → Haiku 4.5). If all Claude attempts fail (rate limit, overload, etc.) and `GEMINI_API_KEY` is set, the script automatically falls back to Gemini (default chain: `gemini-3-fast` → `gemini-2.5-flash` → `gemini-2.5-flash-lite`). Gemini is only consumed when Claude is unavailable, so normal daily runs do **not** count against Gemini free-tier quota used by other projects.
 
 ## Error Handling
 - yt-dlp fails for a channel → log error, skip channel, continue

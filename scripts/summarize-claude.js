@@ -26,6 +26,20 @@ const fallbackModels = (process.env.CLAUDE_FALLBACK_MODELS || 'claude-sonnet-4-6
   .filter(Boolean);
 const modelsToTry = [...new Set([requestedModel, ...fallbackModels])];
 
+// Inter-request delay between videos to stay below Anthropic per-minute token limits.
+const interRequestDelayMs = Math.max(0, parseInt(process.env.CLAUDE_INTER_REQUEST_DELAY_MS || '2000', 10) || 0);
+// Per-model retries on transient (429 rate limit / 529 overloaded) errors before moving to the next model.
+const transientMaxRetries = Math.max(0, parseInt(process.env.CLAUDE_TRANSIENT_MAX_RETRIES || '2', 10) || 0);
+const transientBaseBackoffMs = Math.max(500, parseInt(process.env.CLAUDE_TRANSIENT_BACKOFF_MS || '5000', 10) || 5000);
+
+// Optional Gemini fallback chain when all Claude models fail.
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const geminiFallbackModels = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3-fast,gemini-2.5-flash,gemini-2.5-flash-lite')
+  .split(',')
+  .map(m => m.trim())
+  .filter(Boolean);
+const geminiRequestTimeoutMs = Math.max(30000, parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '180000', 10) || 180000);
+
 if (!apiKey && !oauthToken) {
   console.error('Missing ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN. Add one as a GitHub Actions secret or local environment variable.');
   process.exit(1);
@@ -66,8 +80,15 @@ if (rawItems.length === 0) {
 for (let i = 0; i < rawItems.length; i++) {
   const video = rawItems[i];
   console.log(`Summarizing video ${i + 1}/${rawItems.length}: ${video.title || video.videoId}`);
+  if (i > 0 && interRequestDelayMs > 0) {
+    await sleep(interRequestDelayMs);
+  }
   const summary = await summarizeVideo(video, i + 1, rawItems.length);
   videoSummaries.push({ video, summary });
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 const markdown = assembleDigest(title, videoSummaries);
@@ -294,20 +315,78 @@ async function callClaudeWithFallback(text) {
   const errors = [];
 
   for (const model of modelsToTry) {
-    console.log(`Trying Claude model: ${model}`);
-    try {
-      const response = await callClaude(model, text);
-      const responseText = extractText(response);
-      console.log(`Using Claude model: ${model}`);
-      return responseText;
-    } catch (err) {
-      errors.push(`${model}: ${err.message}`);
-      if (!isRetryableClaudeError(err)) throw err;
-      console.warn(`Claude text response failed, trying fallback: ${model} (${String(err.message).slice(0, 160)})`);
+    for (let attempt = 0; attempt <= transientMaxRetries; attempt++) {
+      console.log(`Trying Claude model: ${model}${attempt > 0 ? ` (retry ${attempt}/${transientMaxRetries})` : ''}`);
+      try {
+        const response = await callClaude(model, text);
+        const responseText = extractText(response);
+        console.log(`Using Claude model: ${model}`);
+        return responseText;
+      } catch (err) {
+        errors.push(`${model}#${attempt}: ${err.message}`);
+        const transient = isOverloadError(err) || isQuotaError(err) || (Number.isFinite(err?.status) && err.status >= 500);
+        if (transient && attempt < transientMaxRetries) {
+          const backoff = transientBaseBackoffMs * Math.pow(2, attempt);
+          console.warn(`Claude transient error on ${model}, backing off ${backoff}ms then retrying. (${String(err.message).slice(0, 160)})`);
+          await sleep(backoff);
+          continue;
+        }
+        if (!isRetryableClaudeError(err)) throw err;
+        console.warn(`Claude text response failed, trying next model after ${model} (${String(err.message).slice(0, 160)})`);
+        break;
+      }
     }
   }
 
-  throw new Error(`No configured Claude model returned usable text. Tried: ${modelsToTry.join(', ')} ${errors.join(' | ')}`);
+  if (geminiApiKey && geminiFallbackModels.length) {
+    console.warn(`All Claude models exhausted; falling back to Gemini (${geminiFallbackModels.join(' -> ')}).`);
+    try {
+      return await callGeminiWithFallback(text);
+    } catch (geminiErr) {
+      errors.push(`gemini-fallback: ${geminiErr.message}`);
+    }
+  }
+
+  throw new Error(`No configured model returned usable text. Tried Claude: ${modelsToTry.join(', ')}${geminiApiKey ? ` then Gemini: ${geminiFallbackModels.join(', ')}` : ''} | ${errors.join(' | ')}`);
+}
+
+async function callGeminiWithFallback(prompt) {
+  const errors = [];
+  for (const model of geminiFallbackModels) {
+    console.log(`Trying Gemini fallback model: ${model}`);
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(geminiRequestTimeoutMs),
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, topP: 0.8 }
+        })
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        const err = new Error(`Gemini API failed (${res.status}): ${body.slice(0, 600)}`);
+        err.status = res.status;
+        err.body = body;
+        throw err;
+      }
+      const json = await res.json();
+      const parts = json?.candidates?.[0]?.content?.parts || [];
+      const text = parts.map(p => p?.text || '').join('\n').trim();
+      if (!text) throw new Error(`Gemini response had no text: ${JSON.stringify(json).slice(0, 400)}`);
+      console.log(`Using Gemini fallback model: ${model}`);
+      return text;
+    } catch (err) {
+      errors.push(`${model}: ${err.message}`);
+      const status = err?.status;
+      const retryable = status === 404 || status === 429 || status === 503 || (Number.isFinite(status) && status >= 500);
+      if (!retryable) throw err;
+      console.warn(`Gemini fallback ${model} failed, trying next. (${String(err.message).slice(0, 160)})`);
+    }
+  }
+  throw new Error(`Gemini fallback exhausted: ${errors.join(' | ')}`);
 }
 
 async function callClaude(model, prompt) {
