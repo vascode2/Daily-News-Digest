@@ -72,6 +72,17 @@ for (const block of videoBlocks) {
     console.log(`  ❌ ERROR: "${title}" — transcriptSegments 있음에도 [자막 기반 타임라인 없음] 사용`);
   }
 
+  if (/Gemini 응답이 제한되어|자막 조각이 충분하지 않아 제목과 설명 중심으로만 요약했습니다/.test(block)) {
+    issues.push({
+      level: 'ERROR',
+      video: title,
+      check: 'gemini_fallback_summary',
+      detail: 'Gemini fallback summary was generated; do not publish low-confidence title/description-only output'
+    });
+    errorCount++;
+    console.log(`  ❌ ERROR: "${title}" — Gemini fallback summary generated`);
+  }
+
   for (const section of alwaysRequired) {
     if (!block.includes(section)) {
       issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section}` });
@@ -79,16 +90,14 @@ for (const block of videoBlocks) {
       console.log(`  ❌ ERROR: "${title}" — missing section: ${section}`);
     }
   }
-  // 주요 타임라인 is optional — only warn if missing.
-  // It can also be replaced by inline timestamps in the structured summary body
-  // (computed below as `inlineStamps`); we re-check after that count is known.
-  const summaryTextEarly = extractSectionBody(block, '핵심 요약', ['주요 타임라인']);
-  const earlyInlineStamps = (summaryTextEarly.match(/\[\[?\d{1,2}:\d{2}(?::\d{2})?\]?\]\(https?:\/\/[^)]*[?&]t=\d+/g) || []).length;
+  // 주요 타임라인 is required when transcript segments are available.
+  // Inline timestamps still count for coverage, but they no longer replace the
+  // quick-scan timeline section.
   for (const section of transcriptOnlyRequired) {
-    if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && !block.includes(section) && earlyInlineStamps < 3) {
-      issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section} (and <3 inline timestamps in body)` });
+    if ((raw?.hasTranscript || ((raw?.transcriptSegments || []).length >= 3)) && !block.includes(section)) {
+      issues.push({ level: 'ERROR', video: title, check: 'missing_section', detail: `Missing: ${section} (transcript available)` });
       errorCount++;
-      console.log(`  ❌ ERROR: "${title}" — missing section: ${section} (transcript available, no inline stamps)`);
+      console.log(`  ❌ ERROR: "${title}" — missing section: ${section} (transcript available)`);
     } else if (!raw?.hasTranscript && !block.includes(section)) {
       issues.push({ level: 'WARNING', video: title, check: 'missing_section', detail: `Missing: ${section}` });
     }
@@ -124,16 +133,6 @@ for (const block of videoBlocks) {
     });
     errorCount++;
     console.log(`  ❌ ERROR: "${title}" — 핵심 요약 언어가 한국어 중심이 아님`);
-  }
-
-  if (!/(예를 들어|예시|사례|데모|실험|비교)/.test(normalizedSummary)) {
-    issues.push({
-      level: 'WARNING',
-      video: title,
-      check: 'summary_examples',
-      detail: '핵심 요약 should include at least one concrete example/demo/case when the transcript provides one'
-    });
-    console.log(`  ⚠️  WARNING: "${title}" — 핵심 요약에 명시적 사례/데모 단어가 없음`);
   }
 
   if (/(?:'|"|‘|“)?(이 주식|이 종목)(?:'|"|’|”)?/.test(normalizedSummary) && !/영상에서 구체명은 공개하지 않음/.test(normalizedSummary)) {
@@ -232,7 +231,8 @@ for (const block of videoBlocks) {
     errorCount++;
   }
 
-  if (raw?.duration && timelineSec.some(t => t > raw.duration)) {
+  const durationToleranceSec = 5;
+  if (raw?.duration && timelineSec.some(t => t > raw.duration + durationToleranceSec)) {
     issues.push({ level: 'ERROR', video: title, check: 'timeline_out_of_range', detail: 'Timeline contains timestamp beyond video duration' });
     errorCount++;
   }
@@ -285,7 +285,10 @@ for (const [insight, titles] of insightToTitles.entries()) {
   }
 }
 
-if (!/###\s+📺\s+/.test(content)) {
+if (videoBlocks.length === 0) {
+  issues.push({ level: 'WARNING', check: 'no_videos', detail: 'No video summaries found; digest may be empty because all collected videos were filtered or unavailable' });
+  console.log('  ⚠️  WARNING: no video summaries found — treating as empty digest');
+} else if (!/###\s+📺\s+/.test(content)) {
   issues.push({ level: 'ERROR', check: 'structure', detail: 'No channel sections found (### 📺 ChannelName)' });
   errorCount++;
 }

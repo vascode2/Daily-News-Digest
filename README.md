@@ -7,7 +7,7 @@
 
 ---
 
-Korean general-news and economy-leaning YouTube digest. Every morning at 6:30 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Anthropic Claude (Sonnet 4.6), and publishes a new child page under your configured Notion page.
+Korean general-news and economy-leaning YouTube digest. Every morning at 6:30 AM New York time, GitHub Actions checks the configured channels, summarizes yesterday's videos with Anthropic Claude (Opus 4.7), and publishes a new child page under your configured Notion page.
 
 ## What It Watches
 
@@ -68,7 +68,7 @@ Manual workflows are also available:
 
    | Name | Default |
    | --- | --- |
-   | `CLAUDE_MODEL` | `claude-sonnet-4-6` preferred; falls back to `claude-haiku-4-5` if unavailable |
+   | `CLAUDE_MODEL` | `claude-opus-4-7` preferred; falls back to `claude-sonnet-4-6` → `claude-haiku-4-5` if unavailable |
 
    Override the chain via `CLAUDE_FALLBACK_MODELS` (comma-separated). The script prefers `ANTHROPIC_API_KEY` when present and otherwise uses `CLAUDE_CODE_OAUTH_TOKEN` against the Anthropic Messages API.
 

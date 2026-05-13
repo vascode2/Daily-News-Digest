@@ -17,10 +17,10 @@ const tmpDir = path.join(ROOT, 'tmp');
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_OAUTH_TOKEN;
-const requestedModel = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
+const requestedModel = process.env.CLAUDE_MODEL || 'claude-opus-4-7';
 const claudeRequestTimeoutMs = Math.max(30000, parseInt(process.env.CLAUDE_REQUEST_TIMEOUT_MS || '180000', 10) || 180000);
 const claudeMaxTokens = Math.max(1024, parseInt(process.env.CLAUDE_MAX_TOKENS || '4096', 10) || 4096);
-const fallbackModels = (process.env.CLAUDE_FALLBACK_MODELS || 'claude-sonnet-4-6,claude-haiku-4-5')
+const fallbackModels = (process.env.CLAUDE_FALLBACK_MODELS || 'claude-opus-4-7,claude-sonnet-4-6,claude-haiku-4-5')
   .split(',')
   .map(m => m.trim())
   .filter(Boolean);
