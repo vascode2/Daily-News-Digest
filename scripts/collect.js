@@ -326,8 +326,9 @@ async function fetchChannel(channelEntry) {
     const fetchSubtitles = (authArgs = []) => runCommand('yt-dlp', [
       ...authArgs,
       '--write-auto-sub',
-      '--sub-lang', 'ko-orig,ko,en',
-      '--sub-format', 'json3/vtt',
+      '--write-sub',
+      '--sub-lang', 'ko-orig,ko,ko.*,en,en.*,ja,ja.*,all',
+      '--sub-format', 'json3/srv3/vtt/best',
       '--skip-download',
       '--ignore-no-formats-error',
       ...youtubeClientArgs,
@@ -339,14 +340,14 @@ async function fetchChannel(channelEntry) {
     await fetchSubtitles(cookieArgs);
 
     let subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
-      f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
+      f.startsWith(videoId) && /\.(json3|srv3|vtt|xml)$/.test(f)
     ));
 
     if (subtitleFiles.length === 0 && cookieArgs.length > 0) {
       // Cookies returned nothing; try anonymous fallback for public auto-subs.
       await fetchSubtitles();
       subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
-        f.startsWith(videoId) && (f.endsWith('.json3') || f.endsWith('.vtt'))
+        f.startsWith(videoId) && /\.(json3|srv3|vtt|xml)$/.test(f)
       ));
     }
     if (subtitleFiles.length > 0) {
@@ -362,7 +363,10 @@ async function fetchChannel(channelEntry) {
     }
 
     if (!hasTranscript) {
-      const fallback = await fetchTranscriptFromMetadata(video);
+      // Per-video --dump-json: channel-listing entries don't include subtitles/automatic_captions,
+      // so fetch the full info_dict for this single video to populate the metadata-URL pool.
+      const perVideoInfo = await fetchVideoInfoDict(videoUrl, cookieArgs);
+      const fallback = await fetchTranscriptFromMetadata(perVideoInfo || video);
       if (fallback.transcriptSegments.length > 0) {
         transcriptSegments = fallback.transcriptSegments;
         transcript = transcriptSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
@@ -649,11 +653,12 @@ async function fetchTranscriptFromMetadata(video) {
       });
       if (!res.ok) continue;
       const text = await res.text();
-      const segments = entry.ext === 'json3' || entry.url.includes('fmt=json3')
+      const isJson3 = entry.ext === 'json3' || entry.url.includes('fmt=json3') || text.trimStart().startsWith('{');
+      const segments = isJson3
         ? parseJSON3Segments(text)
         : parseVTTSegments(text);
       if (segments.length >= 3) {
-        return { transcriptSegments: segments, source: `${entry.lang}.${entry.ext} timedtext` };
+        return { transcriptSegments: segments, source: `${entry.lang}.${entry.ext || 'auto'} timedtext` };
       }
     } catch {
       // Try the next available caption URL.
@@ -661,6 +666,34 @@ async function fetchTranscriptFromMetadata(video) {
   }
 
   return { transcriptSegments: [], source: '' };
+}
+
+async function fetchVideoInfoDict(videoUrl, authArgs = []) {
+  // Pulls subtitles/automatic_captions which channel-listing --dump-json omits.
+  const tryRun = (auth) => runCommand('yt-dlp', [
+    ...auth,
+    '--dump-single-json',
+    '--skip-download',
+    '--write-auto-sub',
+    '--write-sub',
+    '--sub-lang', 'ko-orig,ko,ko.*,en,en.*,ja,ja.*,all',
+    '--ignore-no-formats-error',
+    '--extractor-args', 'youtube:player_client=default,web,android,ios,tv;lang=ko',
+    '--add-header', 'Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    '--no-warnings',
+    videoUrl
+  ], { timeout: 60000, maxBuffer: 50 * 1024 * 1024 });
+
+  let result = await tryRun(authArgs);
+  if ((result.status !== 0 || !result.stdout.trim()) && authArgs.length > 0) {
+    result = await tryRun([]);
+  }
+  if (!result.stdout || !result.stdout.trim()) return null;
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
 }
 
 function subtitleMetadataEntries(video) {
@@ -672,8 +705,11 @@ function subtitleMetadataEntries(video) {
       if (!Array.isArray(items)) continue;
       for (const item of items) {
         if (!item?.url) continue;
-        const ext = item.ext || (item.url.includes('fmt=json3') ? 'json3' : item.url.includes('fmt=vtt') ? 'vtt' : '');
-        if (!['json3', 'vtt'].includes(ext)) continue;
+        const ext = item.ext
+          || (item.url.includes('fmt=json3') ? 'json3'
+            : item.url.includes('fmt=srv3') ? 'srv3'
+            : item.url.includes('fmt=vtt') ? 'vtt'
+            : '');
         entries.push({ lang, ext, url: item.url });
       }
     }
@@ -687,13 +723,17 @@ function subtitleMetadataEntries(video) {
 
 function subtitleLanguageRank(lang) {
   if (lang === 'ko-orig') return 0;
-  if (lang === 'ko') return 1;
-  if (lang === 'en') return 2;
+  if (lang === 'ko' || lang.startsWith('ko-') || lang.startsWith('ko.')) return 1;
+  if (lang === 'en' || lang.startsWith('en-') || lang.startsWith('en.')) return 2;
+  if (lang === 'ja' || lang.startsWith('ja-') || lang.startsWith('ja.')) return 3;
   return 9;
 }
 
 function subtitleFormatRank(ext) {
-  return ext === 'json3' ? 0 : 1;
+  if (ext === 'json3') return 0;
+  if (ext === 'srv3') return 1;
+  if (ext === 'vtt') return 2;
+  return 3;
 }
 
 function parseChannelLine(line) {
