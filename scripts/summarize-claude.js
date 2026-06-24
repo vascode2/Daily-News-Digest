@@ -405,7 +405,6 @@ async function callClaude(model, prompt) {
   const body = {
     model,
     max_tokens: claudeMaxTokens,
-    temperature: 0.2,
     messages: [
       { role: 'user', content: prompt }
     ]
