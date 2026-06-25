@@ -28,6 +28,7 @@ jobs:
       - name: Collect last 7 days
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+          YOUTUBE_PROXY: ${{ secrets.YOUTUBE_PROXY }}   # Optional residential/mobile proxy to bypass YouTube's datacenter-IP caption block
           DIGEST_TIMEZONE: America/New_York   # User in EST/EDT
         run: npm run collect:week
 

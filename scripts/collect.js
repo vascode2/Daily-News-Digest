@@ -204,6 +204,27 @@ const youtubeClientArgs = [
 // videos in the same run, producing the recurring "자막 미제공" gaps — especially on
 // prolific channels (e.g. 머니인사이드) that post several long videos per day.
 const SUBTITLE_LANG_TIERS = ['ko-orig,ko', 'en,en-orig'];
+// Optional outbound proxy. YouTube blocks caption/timedtext downloads from many
+// datacenter IP ranges (e.g. GitHub Actions runners), so yt-dlp returns no
+// subtitles there even though the same request succeeds from a residential IP.
+// Set YOUTUBE_PROXY (e.g. http://user:pass@host:port or socks5://host:port) to
+// route all requests through a residential/mobile proxy and restore transcripts
+// in CI. Inert when unset.
+const proxyUrl = (process.env.YOUTUBE_PROXY || process.env.HTTPS_PROXY || process.env.https_proxy || '').trim();
+const proxyArgs = proxyUrl ? ['--proxy', proxyUrl] : [];
+if (proxyUrl) {
+  console.log(`🌐 Routing yt-dlp/fetch through proxy: ${proxyUrl.replace(/\/\/[^@]*@/, '//***@')}`);
+  // Best-effort: route Node's global fetch (undici) through the same proxy so the
+  // direct timedtext metadata fallback also benefits. Silently ignored if undici
+  // isn't requireable on this runtime.
+  try {
+    const undici = require('undici');
+    undici.setGlobalDispatcher(new undici.ProxyAgent(proxyUrl));
+  } catch {
+    // global fetch will use a direct connection; yt-dlp --proxy still applies.
+  }
+}
+
 const channelSource = (process.env.DIGEST_CHANNEL_SOURCE || 'yt-dlp').toLowerCase();
 if (!['yt-dlp', 'web', 'rss'].includes(channelSource)) {
   console.warn(`Unknown DIGEST_CHANNEL_SOURCE "${channelSource}", falling back to yt-dlp`);
@@ -243,6 +264,7 @@ async function fetchChannel(channelEntry) {
 
   const fetchList = (authArgs = []) => runCommand('yt-dlp', [
     ...authArgs,
+    ...proxyArgs,
     '--dump-json',
     '--skip-download',
     '--ignore-no-formats-error',
@@ -334,6 +356,7 @@ async function fetchChannel(channelEntry) {
 
     const fetchSubtitles = (langSpec, authArgs = []) => runCommand('yt-dlp', [
       ...authArgs,
+      ...proxyArgs,
       '--write-auto-sub',
       '--write-sub',
       '--sub-lang', langSpec,
@@ -691,6 +714,7 @@ async function fetchVideoInfoDict(videoUrl, authArgs = []) {
   // Pulls subtitles/automatic_captions which channel-listing --dump-json omits.
   const tryRun = (auth) => runCommand('yt-dlp', [
     ...auth,
+    ...proxyArgs,
     '--dump-single-json',
     '--skip-download',
     '--write-auto-sub',

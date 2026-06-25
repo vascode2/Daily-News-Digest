@@ -39,6 +39,7 @@ jobs:
       - name: Collect videos from single channel
         env:
           YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+          YOUTUBE_PROXY: ${{ secrets.YOUTUBE_PROXY }}   # Optional residential/mobile proxy to bypass YouTube's datacenter-IP caption block
           DIGEST_TIMEZONE: America/New_York
         run: |
           node --env-file-if-exists=.env scripts/collect.js \
