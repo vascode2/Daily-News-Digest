@@ -195,6 +195,15 @@ const youtubeClientArgs = [
   '--extractor-args', 'youtube:player_client=default,web,android,ios,tv;lang=ko',
   '--add-header', 'Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
 ];
+
+// Subtitle language tiers, fetched in order. We request the narrowest useful set
+// first (Korean) and only widen to English when Korean is unavailable.
+// IMPORTANT: never request `all`. With `all`, yt-dlp downloads every available
+// auto-translated track (100+ languages, ~0.5 MB each) for a single video, which
+// quickly trips YouTube's HTTP 429 rate limiter. The 429 then cascades to later
+// videos in the same run, producing the recurring "자막 미제공" gaps — especially on
+// prolific channels (e.g. 머니인사이드) that post several long videos per day.
+const SUBTITLE_LANG_TIERS = ['ko-orig,ko', 'en,en-orig'];
 const channelSource = (process.env.DIGEST_CHANNEL_SOURCE || 'yt-dlp').toLowerCase();
 if (!['yt-dlp', 'web', 'rss'].includes(channelSource)) {
   console.warn(`Unknown DIGEST_CHANNEL_SOURCE "${channelSource}", falling back to yt-dlp`);
@@ -323,33 +332,43 @@ async function fetchChannel(channelEntry) {
     let hasTranscript = false;
     let transcriptSource = '';
 
-    const fetchSubtitles = (authArgs = []) => runCommand('yt-dlp', [
+    const fetchSubtitles = (langSpec, authArgs = []) => runCommand('yt-dlp', [
       ...authArgs,
       '--write-auto-sub',
       '--write-sub',
-      '--sub-lang', 'ko-orig,ko,ko.*,en,en.*,ja,ja.*,all',
+      '--sub-lang', langSpec,
       '--sub-format', 'json3/srv3/vtt/best',
       '--skip-download',
       '--ignore-no-formats-error',
+      '--retries', '10',
+      '--extractor-retries', '3',
+      '--sleep-subtitles', '1',
       ...youtubeClientArgs,
       '--no-warnings',
       '-o', path.join(tmpDir, `%(id)s.%(ext)s`),
       videoUrl
     ], { timeout: 60000 });
 
-    await fetchSubtitles(cookieArgs);
-
-    let subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
+    const readSubtitleFiles = () => sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
       f.startsWith(videoId) && /\.(json3|srv3|vtt|xml)$/.test(f)
     ));
 
-    if (subtitleFiles.length === 0 && cookieArgs.length > 0) {
-      // Cookies returned nothing; try anonymous fallback for public auto-subs.
-      await fetchSubtitles();
-      subtitleFiles = sortSubtitleFiles(fs.readdirSync(tmpDir).filter(f =>
-        f.startsWith(videoId) && /\.(json3|srv3|vtt|xml)$/.test(f)
-      ));
+    // Try Korean first, then widen to English only if needed. Stop at the first tier
+    // that yields subtitle files so we never fetch more tracks than necessary.
+    let subtitleFiles = [];
+    for (const langSpec of SUBTITLE_LANG_TIERS) {
+      await fetchSubtitles(langSpec, cookieArgs);
+      subtitleFiles = readSubtitleFiles();
+
+      if (subtitleFiles.length === 0 && cookieArgs.length > 0) {
+        // Cookies returned nothing; try anonymous fallback for public auto-subs.
+        await fetchSubtitles(langSpec);
+        subtitleFiles = readSubtitleFiles();
+      }
+
+      if (subtitleFiles.length > 0) break;
     }
+
     if (subtitleFiles.length > 0) {
       const subtitleFile = subtitleFiles[0];
       const subtitleContent = fs.readFileSync(path.join(tmpDir, subtitleFile), 'utf8');
@@ -676,7 +695,7 @@ async function fetchVideoInfoDict(videoUrl, authArgs = []) {
     '--skip-download',
     '--write-auto-sub',
     '--write-sub',
-    '--sub-lang', 'ko-orig,ko,ko.*,en,en.*,ja,ja.*,all',
+    '--sub-lang', 'ko-orig,ko,en',
     '--ignore-no-formats-error',
     '--extractor-args', 'youtube:player_client=default,web,android,ios,tv;lang=ko',
     '--add-header', 'Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
