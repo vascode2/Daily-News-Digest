@@ -3,10 +3,10 @@ name: '[AUTO] Daily News Digest'
 # Trigger after YOUTUBE_COOKIES_B64 secret refresh (2026-05-12)
 on:
   schedule:
-    # GitHub cron is UTC only. 6:00 AM America/New_York is 10:00 UTC during
-    # daylight saving time and 11:00 UTC during standard time.
-    - cron: '0 10 * * *'
-    - cron: '0 11 * * *'
+    # GitHub cron is UTC only. 4:30 AM America/New_York is 8:30 UTC during
+    # daylight saving time and 9:30 UTC during standard time.
+    - cron: '30 8 * * *'
+    - cron: '30 9 * * *'
   push:
     branches: [main]
     paths:
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Check 6:00 AM local time
+      - name: Check 4:30 AM local time
         id: gate
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "push" ]; then
@@ -41,13 +41,13 @@ jobs:
           schedule="${{ github.event.schedule }}"
           ny_offset=$(TZ=America/New_York date +%z)
 
-          if { [ "$schedule" = "0 10 * * *" ] && [ "$ny_offset" = "-0400" ]; } || \
-             { [ "$schedule" = "0 11 * * *" ] && [ "$ny_offset" = "-0500" ]; }; then
+          if { [ "$schedule" = "30 8 * * *" ] && [ "$ny_offset" = "-0400" ]; } || \
+             { [ "$schedule" = "30 9 * * *" ] && [ "$ny_offset" = "-0500" ]; }; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Scheduled 6:00 AM America/New_York slot: proceeding."
+            echo "Scheduled 4:30 AM America/New_York slot: proceeding."
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Non-6:00 AM America/New_York slot (${schedule}, offset ${ny_offset}): skipping."
+            echo "Non-4:30 AM America/New_York slot (${schedule}, offset ${ny_offset}): skipping."
           fi
 
       - uses: actions/checkout@v5
