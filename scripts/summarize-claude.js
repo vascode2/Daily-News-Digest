@@ -429,12 +429,16 @@ async function recoverMissingTranscriptsWithGemini(items) {
 
   console.log(`Gemini transcript recovery: ${Math.min(targets.length, geminiVideoRecoveryLimit)} video(s) lack captions; analyzing via Gemini video input.`);
   let recovered = 0;
-  let quotaExhausted = false;
+  const deadModels = new Set();
 
   for (const video of targets) {
-    if (recovered >= geminiVideoRecoveryLimit || quotaExhausted) break;
+    if (recovered >= geminiVideoRecoveryLimit) break;
+    if (deadModels.size >= geminiFallbackModels.length) {
+      console.warn('  Gemini recovery paused: all models quota-exhausted.');
+      break;
+    }
     try {
-      const result = await callGeminiVideoSummaryWithFallback(video);
+      const result = await callGeminiVideoSummaryWithFallback(video, deadModels);
       if (result?.summary && result.summary.length > 80) {
         video.geminiVideoSummary = result.summary;
         video.geminiTimestampNotes = result.notes;
@@ -442,26 +446,25 @@ async function recoverMissingTranscriptsWithGemini(items) {
         console.log(`  ✅ Recovered ${video.videoId} via Gemini (${result.summary.length} chars, ${result.notes.length} notes)`);
       }
     } catch (err) {
-      if (isQuotaError(err)) {
-        quotaExhausted = true;
-        console.warn(`  Gemini recovery paused after quota limit: ${String(err.message).slice(0, 160)}`);
-      } else {
-        console.warn(`  Gemini recovery skipped for ${video.videoId}: ${String(err.message).slice(0, 160)}`);
-      }
+      console.warn(`  Gemini recovery skipped for ${video.videoId}: ${String(err.message).slice(0, 160)}`);
     }
   }
   console.log(`Gemini transcript recovery: ${recovered} recovered.`);
 }
 
-async function callGeminiVideoSummaryWithFallback(video) {
-  const models = [...new Set([...geminiFallbackModels])];
+async function callGeminiVideoSummaryWithFallback(video, deadModels = new Set()) {
+  const models = [...new Set([...geminiFallbackModels])].filter(m => !deadModels.has(m));
   const errors = [];
   for (const model of models) {
     try {
       return await callGeminiVideoSummary(model, video);
     } catch (err) {
       errors.push(`${model}: ${err.message}`);
-      if (isQuotaError(err)) throw err;
+      if (isQuotaError(err)) {
+        deadModels.add(model);
+        console.warn(`  Gemini model ${model} quota-exhausted; rotating to next model.`);
+        continue;
+      }
       if (!isMissingModelError(err) && !isVideoInputModelError(err)) throw err;
     }
   }
