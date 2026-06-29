@@ -94,6 +94,14 @@ async function main() {
   const digestPages = children.filter(b => b.type === 'child_page' && isDigestPageTitle(childPageTitle(b)));
   console.log(`   Found ${digestPages.length} digest page(s) currently under the parent.`);
 
+  // Show current top-to-bottom order (children are returned in document order).
+  const order = digestPages.map(p => childPageTitle(p));
+  if (order.length) {
+    const head = order.slice(0, 4).join(' | ');
+    const tail = order.slice(-2).join(' | ');
+    console.log(`   Current order (top→bottom): ${head}${order.length > 6 ? '  …  ' : '  '}${tail}`);
+  }
+
   // Group existing pages by title to detect duplicates.
   const byTitle = new Map();
   for (const p of digestPages) {
