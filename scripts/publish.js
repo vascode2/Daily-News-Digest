@@ -158,7 +158,7 @@ if (videoCount === 0) {
       parentPageId: notionPageId,
       title: notionTitle,
       blocks,
-      position: { type: 'start' },
+      position: { type: 'page_start' },
       token: notionToken
     });
 

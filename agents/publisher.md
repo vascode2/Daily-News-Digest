@@ -32,7 +32,7 @@ Format final summaries and deliver to output destinations.
 - Use Notion API: POST /v1/pages
 
 ## Notion Ordering & De-duplication
-- Newest digest is inserted at the TOP via the page `position: { type: "start" }` parameter, so the latest report appears first and older ones below.
+- Newest digest is inserted at the TOP via the page `position: { type: "page_start" }` parameter (requires Notion-Version 2026-03-11+), so the latest report appears first and older ones below.
 - Before creating a page, publish archives any existing child page with the same title, so re-runs of the same date never produce duplicates.
 - Shared Notion logic lives in `scripts/notion.js`.
 - One-time / on-demand maintenance: `npm run notion:cleanup` (or the `[MANUAL] Notion Cleanup` workflow) de-duplicates existing date pages and rebuilds them from `output/*.md` so the newest is on top.

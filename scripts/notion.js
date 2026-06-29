@@ -105,7 +105,7 @@ export async function archiveBlock(blockId, token) {
 
 /**
  * Create a digest page under a parent page from already-converted blocks.
- * `position` is an optional Notion position object, e.g. { type: 'start' }.
+ * `position` is an optional Notion position object, e.g. { type: 'page_start' }.
  * Falls back gracefully (no position) if the API rejects the position param.
  * Returns the created page object.
  */

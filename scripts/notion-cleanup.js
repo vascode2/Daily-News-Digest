@@ -157,7 +157,7 @@ async function main() {
     if (dryRun) { console.log(`   [dry] create "${title}" (${blocks.length} blocks) at top`); created++; continue; }
     try {
       const page = await createDigestPage({
-        parentPageId, title, blocks, position: { type: 'start' }, token
+        parentPageId, title, blocks, position: { type: 'page_start' }, token
       });
       created++;
       if (positionStartWorks === null) positionStartWorks = true;
