@@ -6,6 +6,14 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  updateParentPageTitle,
+  listChildBlocks,
+  childPageTitle,
+  archiveBlock,
+  createDigestPage,
+  markdownToNotionBlocks
+} from './notion.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -121,7 +129,7 @@ if (videoCount === 0) {
 } else if (notionToken && notionPageId) {
   console.log('📝 Publishing to Notion...');
   try {
-    await tryUpdateParentPageTitle(notionPageId, notionRootTitle, notionToken);
+    await updateParentPageTitle(notionPageId, notionRootTitle, notionToken);
 
     const blocks = markdownToNotionBlocks(finalContent);
     console.log(`   Converted to ${blocks.length} Notion blocks`);
@@ -132,38 +140,27 @@ if (videoCount === 0) {
         ? `📰 Weekly News Digest ${startStr} ~ ${endStr}`
         : `📰 ${endStr}`;
 
-    const firstBatch = blocks.slice(0, 100);
-    const restBatches = [];
-    for (let i = 100; i < blocks.length; i += 100) {
-      restBatches.push(blocks.slice(i, i + 100));
+    // De-dup: archive any existing child page(s) with the same title so re-runs
+    // don't pile up duplicate date pages.
+    try {
+      const children = await listChildBlocks(notionPageId, notionToken);
+      const dupes = children.filter(b => b.type === 'child_page' && childPageTitle(b) === notionTitle);
+      for (const dup of dupes) {
+        await archiveBlock(dup.id, notionToken);
+        console.log(`   🗑️  Archived existing page "${notionTitle}"`);
+      }
+    } catch (err) {
+      console.log(`   ⚠️  Dedup skipped: ${err.message}`);
     }
 
-    const createRes = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
-      headers: notionHeaders(notionToken),
-      body: JSON.stringify({
-        parent: { page_id: notionPageId },
-        properties: { title: { title: [{ text: { content: notionTitle } }] } },
-        children: firstBatch
-      })
+    // Insert at the top so the newest digest appears first.
+    const createdPage = await createDigestPage({
+      parentPageId: notionPageId,
+      title: notionTitle,
+      blocks,
+      position: { type: 'start' },
+      token: notionToken
     });
-
-    if (!createRes.ok) {
-      const err = await createRes.text();
-      throw new Error(`${createRes.status}: ${err}`);
-    }
-
-    const createdPage = await createRes.json();
-    const newPageId = createdPage.id;
-
-    for (const batch of restBatches) {
-      const r = await fetch(`https://api.notion.com/v1/blocks/${newPageId}/children`, {
-        method: 'PATCH',
-        headers: notionHeaders(notionToken),
-        body: JSON.stringify({ children: batch })
-      });
-      if (!r.ok) console.error(`   ⚠️  Append failed: ${r.status}`);
-    }
 
     notionUrl = createdPage.url;
     console.log(`   ✅ Notion: ${notionUrl}`);
@@ -188,6 +185,7 @@ console.log(`
 📝 Notion:  ${notionUrl}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
+
 // ── helpers ──────────────────────────────────────────────────
 
 function findLatestSummaries(dir) {
@@ -197,36 +195,6 @@ function findLatestSummaries(dir) {
     .map(f => ({ name: f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
     .sort((a, b) => b.mtime - a.mtime);
   return files.length > 0 ? path.join(dir, files[0].name) : null;
-}
-
-function notionHeaders(token) {
-  return {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    'Notion-Version': '2022-06-28'
-  };
-}
-
-async function tryUpdateParentPageTitle(pageId, targetTitle, token) {
-  try {
-    const res = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
-      method: 'PATCH',
-      headers: notionHeaders(token),
-      body: JSON.stringify({
-        properties: {
-          title: {
-            title: [{ text: { content: targetTitle } }]
-          }
-        }
-      })
-    });
-
-    if (!res.ok) {
-      console.log(`   ⚠️  Could not rename parent page title (${res.status})`);
-    }
-  } catch (err) {
-    console.log(`   ⚠️  Could not rename parent page title (${err.message})`);
-  }
 }
 
 function formatDateKo(dateStr) {
@@ -245,121 +213,4 @@ function formatGeneratedTime(date, timeZone) {
 
   const value = type => parts.find(part => part.type === type)?.value || '';
   return `${value('dayPeriod')} ${value('hour')}:${value('minute')} ${value('timeZoneName')}`.trim();
-}
-
-function markdownToNotionBlocks(md) {
-  const blocks = [];
-  const lines = md.split('\n');
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    if (!trimmed) { i++; continue; }
-
-    if (trimmed === '---') {
-      blocks.push({ object: 'block', type: 'divider', divider: {} });
-      i++; continue;
-    }
-    if (trimmed.startsWith('# ')) { blocks.push(headingBlock(1, trimmed.slice(2))); i++; continue; }
-    if (trimmed.startsWith('## ')) { blocks.push(headingBlock(2, trimmed.slice(3))); i++; continue; }
-    if (trimmed.startsWith('### ')) { blocks.push(headingBlock(3, trimmed.slice(4))); i++; continue; }
-
-    if (trimmed.startsWith('> ')) {
-      blocks.push({
-        object: 'block', type: 'quote',
-        quote: { rich_text: parseRichText(trimmed.slice(2)) }
-      });
-      i++; continue;
-    }
-    if (trimmed.startsWith('- ')) {
-      blocks.push({
-        object: 'block', type: 'bulleted_list_item',
-        bulleted_list_item: { rich_text: parseRichText(trimmed.slice(2)) }
-      });
-      i++; continue;
-    }
-    if (trimmed.startsWith('|')) {
-      const tableLines = [];
-      while (i < lines.length && lines[i].trim().startsWith('|')) {
-        tableLines.push(lines[i].trim());
-        i++;
-      }
-      const cleaned = tableLines.filter(l => !/^\|[\s\-:|]+\|$/.test(l));
-      blocks.push({
-        object: 'block', type: 'code',
-        code: {
-          rich_text: [{ type: 'text', text: { content: cleaned.join('\n').slice(0, 2000) } }],
-          language: 'plain text'
-        }
-      });
-      continue;
-    }
-
-    blocks.push({
-      object: 'block', type: 'paragraph',
-      paragraph: { rich_text: parseRichText(trimmed) }
-    });
-    i++;
-  }
-  return blocks;
-}
-
-function headingBlock(level, text) {
-  const type = `heading_${level}`;
-  // Channel headers (### 📺 Channel Name) are styled red for visibility
-  const isChannelHeader = level === 3 && /^📺\s/.test(text);
-  const block = { rich_text: parseRichText(text) };
-  if (isChannelHeader) block.color = 'red';
-  return { object: 'block', type, [type]: block };
-}
-
-/**
- * Parse markdown inline syntax into Notion rich_text array.
- * Supports: [text](url) links, **bold**, plain text. Order-independent.
- */
-function parseRichText(text) {
-  // Tokenize: find all [text](url) and **bold** spans, fill the rest as plain.
-  // Link regex: non-greedy text, but must be followed by '](http...' so nested
-  // brackets in YouTube titles like '[프롬프트 공유] 시댄스...' are handled.
-  const tokens = [];
-  const linkRe = /\[([\s\S]+?)\]\((https?:\/\/[^)]+)\)/g;
-  const boldRe = /\*\*([^*]+)\*\*/g;
-  const matches = [];
-  let m;
-  while ((m = linkRe.exec(text)) !== null) {
-    matches.push({ start: m.index, end: m.index + m[0].length, kind: 'link', text: m[1], url: m[2] });
-  }
-  while ((m = boldRe.exec(text)) !== null) {
-    matches.push({ start: m.index, end: m.index + m[0].length, kind: 'bold', text: m[1] });
-  }
-  matches.sort((a, b) => a.start - b.start);
-
-  // Drop overlapping matches (keep first)
-  const filtered = [];
-  let lastEnd = 0;
-  for (const mt of matches) {
-    if (mt.start >= lastEnd) { filtered.push(mt); lastEnd = mt.end; }
-  }
-
-  let cursor = 0;
-  for (const mt of filtered) {
-    if (mt.start > cursor) tokens.push(plainSegment(text.slice(cursor, mt.start)));
-    if (mt.kind === 'link') tokens.push(linkSegment(mt.text, mt.url));
-    else if (mt.kind === 'bold') tokens.push(boldSegment(mt.text));
-    cursor = mt.end;
-  }
-  if (cursor < text.length) tokens.push(plainSegment(text.slice(cursor)));
-
-  return tokens.length > 0 ? tokens : [plainSegment(text)];
-}
-
-function plainSegment(t) {
-  return { type: 'text', text: { content: t.slice(0, 2000) } };
-}
-function boldSegment(t)  {
-  return { type: 'text', text: { content: t.slice(0, 2000) }, annotations: { bold: true } };
-}
-function linkSegment(t, url) {
-  return { type: 'text', text: { content: t.slice(0, 2000), link: { url } } };
 }

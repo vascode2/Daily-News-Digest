@@ -11,6 +11,7 @@
     "summarize:gemini": "node --env-file-if-exists=.env scripts/summarize-gemini.js",
     "review": "node --env-file-if-exists=.env scripts/review.js",
     "publish": "node --env-file-if-exists=.env scripts/publish.js",
+    "notion:cleanup": "node --env-file-if-exists=.env scripts/notion-cleanup.js",
     "test": "node tests/test-pipeline.js"
   }
 }

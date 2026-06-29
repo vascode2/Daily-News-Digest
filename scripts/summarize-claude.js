@@ -49,6 +49,12 @@ const geminiRequestTimeoutMs = Math.max(30000, parseInt(process.env.GEMINI_REQUE
 // then uses as the content source. On by default whenever GEMINI_API_KEY exists.
 const geminiVideoRecovery = process.env.GEMINI_VIDEO_RECOVERY !== 'false' && Boolean(geminiApiKey);
 const geminiVideoRecoveryLimit = Math.max(0, parseInt(process.env.GEMINI_VIDEO_RECOVERY_LIMIT || '20', 10) || 20);
+// Delay between recovery calls helps stay under Gemini's per-minute limits so
+// more caption-less videos get recovered before the quota trips.
+const geminiRecoveryDelayMs = Math.max(0, parseInt(process.env.GEMINI_RECOVERY_DELAY_MS || '4000', 10) || 0);
+// Per-video retries on a 429 before giving up on that model.
+const geminiRecoveryMaxRetries = Math.max(0, parseInt(process.env.GEMINI_RECOVERY_MAX_RETRIES || '1', 10) || 0);
+const geminiRecoveryBackoffMs = Math.max(0, parseInt(process.env.GEMINI_RECOVERY_BACKOFF_MS || '15000', 10) || 0);
 
 if (!apiKey && !oauthToken) {
   console.error('Missing ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN. Add one as a GitHub Actions secret or local environment variable.');
@@ -126,7 +132,7 @@ Output requirements:
 - Use concrete names/companies/stocks/sectors/numbers/years from the transcript or description.
 - If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS), and include a **주요 타임라인** section with 3-6 linked entries.
 - If transcriptSegments is empty but geminiVideoSummary (a Gemini analysis of the actual video) is present, treat geminiVideoSummary as the primary content source — write a full, specific summary from it. If geminiTimestampNotes has 3+ entries, build at least 3 inline timestamp links and a **주요 타임라인** from those notes. Do NOT say transcripts are unavailable.
-- If transcriptSegments and geminiVideoSummary are both empty, summarize from the available title and description only. Be conservative, clearly say when details are not available, do not invent timestamps, and omit 주요 타임라인.
+- If transcriptSegments and geminiVideoSummary are both empty, summarize from the available title and description only. Extract every concrete fact, name, number, and claim the title/description/hashtags actually contain — be substantive, not vague. State the transcript limitation briefly and at most ONCE (a single short clause in the intro, e.g. "자막이 없어 제목·설명 기준으로 정리"); never repeat "자막 미제공/확인 불가" in individual bullets. Do not invent timestamps and omit 주요 타임라인.
 - Use exactly one inline timestamp per bullet. Two timestamps beside each other are not a range; avoid adjacent timestamp links like [03:07](...) [05:40](...). Put extra moments in 주요 타임라인 instead.
 - No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
 
@@ -428,8 +434,13 @@ async function recoverMissingTranscriptsWithGemini(items) {
   const targets = items.filter(v => v.videoId && (v.transcriptSegments || []).length < 3);
   if (targets.length === 0) return;
 
+  // Prioritize the neediest videos: those with the least description text gain
+  // the most from a Gemini watch-through, so spend the scarce quota there first.
+  targets.sort((a, b) => (a.description || '').length - (b.description || '').length);
+
   console.log(`Gemini transcript recovery: ${Math.min(targets.length, geminiVideoRecoveryLimit)} video(s) lack captions; analyzing via Gemini video input.`);
   let recovered = 0;
+  let attempted = 0;
   const deadModels = new Set();
 
   for (const video of targets) {
@@ -438,6 +449,8 @@ async function recoverMissingTranscriptsWithGemini(items) {
       console.warn('  Gemini recovery paused: all models quota-exhausted.');
       break;
     }
+    if (attempted > 0 && geminiRecoveryDelayMs > 0) await sleep(geminiRecoveryDelayMs);
+    attempted++;
     try {
       const result = await callGeminiVideoSummaryWithFallback(video, deadModels);
       if (result?.summary && result.summary.length > 80) {
@@ -457,16 +470,27 @@ async function callGeminiVideoSummaryWithFallback(video, deadModels = new Set())
   const models = [...new Set([...geminiFallbackModels])].filter(m => !deadModels.has(m));
   const errors = [];
   for (const model of models) {
-    try {
-      return await callGeminiVideoSummary(model, video);
-    } catch (err) {
-      errors.push(`${model}: ${err.message}`);
-      if (isQuotaError(err)) {
-        deadModels.add(model);
-        console.warn(`  Gemini model ${model} quota-exhausted; rotating to next model.`);
-        continue;
+    for (let attempt = 0; attempt <= geminiRecoveryMaxRetries; attempt++) {
+      try {
+        return await callGeminiVideoSummary(model, video);
+      } catch (err) {
+        errors.push(`${model}: ${err.message}`);
+        if (isQuotaError(err)) {
+          // A 429 is often a per-minute limit; back off and retry the same model
+          // before declaring it dead for the rest of the run.
+          if (attempt < geminiRecoveryMaxRetries && geminiRecoveryBackoffMs > 0) {
+            const wait = geminiRecoveryBackoffMs * Math.pow(2, attempt);
+            console.warn(`  Gemini ${model} hit 429; backing off ${Math.round(wait / 1000)}s then retrying.`);
+            await sleep(wait);
+            continue;
+          }
+          deadModels.add(model);
+          console.warn(`  Gemini model ${model} quota-exhausted; rotating to next model.`);
+          break;
+        }
+        if (!isMissingModelError(err) && !isVideoInputModelError(err)) throw err;
+        break;
       }
-      if (!isMissingModelError(err) && !isVideoInputModelError(err)) throw err;
     }
   }
   throw new Error(`No Gemini model accepted video input. ${errors.join(' | ')}`);
