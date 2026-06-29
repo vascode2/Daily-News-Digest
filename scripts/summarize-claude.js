@@ -117,7 +117,8 @@ This is video ${index} of ${total}. Focus only on this video. Do not summarize o
 
 Output requirements:
 - Return markdown only. No code fence. No explanations.
-- Start with exactly one h2 video heading: ## [한국어 영상 제목](${videoUrl})
+- Start with exactly one h2 video heading: ## [영상 제목](${videoUrl})
+- Title language rule, very important: write the heading title in the SAME language the speaker actually uses in the video. The video JSON title field is the creator's chosen title and is sometimes English even on Korean-spoken channels — do NOT copy an English title for a Korean video. If the video is spoken in Korean, render a natural Korean title (translate or rewrite the English/foreign title into concise Korean that reflects the real content). Only keep an English/foreign title if the video itself is actually spoken in that language.
 - The first sentence after **핵심 요약** must NOT restate the video title. Start with the speaker, issue, claim, or data point instead.
 - Do NOT include a digest title, channel heading, upload date, view count, duration, or transcript indicator.
 - Section order: **한 줄 인사이트** → **핵심 요약** → **주요 타임라인** when transcriptSegments or geminiTimestampNotes exist.
