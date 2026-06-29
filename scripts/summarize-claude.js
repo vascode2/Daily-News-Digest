@@ -3,8 +3,9 @@
  * summarize-claude.js — Generate tmp/summaries-*.md from the latest tmp/raw-*.json using Anthropic Claude.
  *
  * Mirrors scripts/summarize-gemini.js, but uses the Anthropic Messages API.
- * Note: Claude does not ingest YouTube URLs natively, so the Gemini-only
- * YouTube timestamp enrichment step is omitted.
+ * Note: Claude does not ingest YouTube URLs natively. When a video has no
+ * transcript (e.g. captions blocked on CI datacenter IPs), Gemini ingests the
+ * YouTube URL server-side to recover the content, which Claude then summarizes.
  */
 
 import fs from 'fs';
@@ -39,6 +40,15 @@ const geminiFallbackModels = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3-fa
   .map(m => m.trim())
   .filter(Boolean);
 const geminiRequestTimeoutMs = Math.max(30000, parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '180000', 10) || 180000);
+
+// Gemini-based transcript recovery. YouTube blocks caption downloads from
+// datacenter IPs (e.g. GitHub Actions), so videos collected in CI often have
+// no transcript and degrade to a "자막 데이터가 제공되지 않아…" disclaimer. Gemini
+// ingests the YouTube URL server-side (Google → YouTube), bypassing that block,
+// so we ask it to watch the video and return a substantive summary that Claude
+// then uses as the content source. On by default whenever GEMINI_API_KEY exists.
+const geminiVideoRecovery = process.env.GEMINI_VIDEO_RECOVERY !== 'false' && Boolean(geminiApiKey);
+const geminiVideoRecoveryLimit = Math.max(0, parseInt(process.env.GEMINI_VIDEO_RECOVERY_LIMIT || '20', 10) || 20);
 
 if (!apiKey && !oauthToken) {
   console.error('Missing ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN. Add one as a GitHub Actions secret or local environment variable.');
@@ -77,6 +87,8 @@ if (rawItems.length === 0) {
   process.exit(0);
 }
 
+await recoverMissingTranscriptsWithGemini(rawItems);
+
 for (let i = 0; i < rawItems.length; i++) {
   const video = rawItems[i];
   console.log(`Summarizing video ${i + 1}/${rawItems.length}: ${video.title || video.videoId}`);
@@ -108,11 +120,12 @@ Output requirements:
 - Start with exactly one h2 video heading: ## [한국어 영상 제목](${videoUrl})
 - The first sentence after **핵심 요약** must NOT restate the video title. Start with the speaker, issue, claim, or data point instead.
 - Do NOT include a digest title, channel heading, upload date, view count, duration, or transcript indicator.
-- Section order: **한 줄 인사이트** → **핵심 요약** → **주요 타임라인** when transcriptSegments exist.
+- Section order: **한 줄 인사이트** → **핵심 요약** → **주요 타임라인** when transcriptSegments or geminiTimestampNotes exist.
 - 핵심 요약 = intro 1-2 sentences + 3-5 numbered points with bold sub-headings. Each point has 1-3 sub-bullets.
 - Use concrete names/companies/stocks/sectors/numbers/years from the transcript or description.
 - If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS), and include a **주요 타임라인** section with 3-6 linked entries.
-- If transcriptSegments is empty, summarize from the available title and description only. Be conservative, clearly say when details are not available, do not invent timestamps, and omit 주요 타임라인.
+- If transcriptSegments is empty but geminiVideoSummary (a Gemini analysis of the actual video) is present, treat geminiVideoSummary as the primary content source — write a full, specific summary from it. If geminiTimestampNotes has 3+ entries, build at least 3 inline timestamp links and a **주요 타임라인** from those notes. Do NOT say transcripts are unavailable.
+- If transcriptSegments and geminiVideoSummary are both empty, summarize from the available title and description only. Be conservative, clearly say when details are not available, do not invent timestamps, and omit 주요 타임라인.
 - Use exactly one inline timestamp per bullet. Two timestamps beside each other are not a range; avoid adjacent timestamp links like [03:07](...) [05:40](...). Put extra moments in 주요 타임라인 instead.
 - No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
 
@@ -157,9 +170,18 @@ Rewrite the same markdown, preserving the required format, but replace every unr
 function buildFallbackVideoMarkdown(video, err = null) {
   const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
   const titleText = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
-  const description = neutralizeFallbackTeasers(firstUsefulSentence(video.description) || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.');
+  const geminiNotes = Array.isArray(video.geminiTimestampNotes) ? video.geminiTimestampNotes : [];
+  const description = neutralizeFallbackTeasers(
+    (video.geminiVideoSummary && firstUsefulSentence(video.geminiVideoSummary))
+    || firstUsefulSentence(video.description)
+    || '영상 설명에서 확인 가능한 세부 정보가 제한적입니다.'
+  );
   const segments = selectFallbackTimelineSegments(video);
   const channelName = video.channelName || video.channel || '채널';
+
+  const overview = video.geminiVideoSummary
+    ? cleanSentence(video.geminiVideoSummary).slice(0, 600)
+    : description;
 
   const lines = [
     `## [${titleText}](${videoUrl})`,
@@ -170,18 +192,28 @@ function buildFallbackVideoMarkdown(video, err = null) {
     '',
     '**핵심 요약**',
     '',
-    `${channelName} 영상의 자동 요약 응답이 제한되어 제목·설명·자막 조각만으로 보수적으로 정리한 사례입니다. 영상 본문에서 직접 확인이 권장되며, 아래는 공개 메타데이터에서 확인 가능한 범위입니다.`,
+    video.geminiVideoSummary
+      ? `${channelName} 영상을 분석한 내용 요약입니다.`
+      : `${channelName} 영상의 자동 요약 응답이 제한되어 제목·설명만으로 보수적으로 정리한 사례입니다. 영상 본문에서 직접 확인이 권장됩니다.`,
     '',
     '1. **영상 개요**',
     '',
-    `- ${description}`,
+    `- ${overview}`,
     `- 채널: ${channelName}`,
     '',
     '2. **확인 권장 구간**',
     ''
   ];
 
-  if (segments.length >= 3) {
+  if (geminiNotes.length >= 3) {
+    for (const n of geminiNotes) {
+      lines.push(`- [${formatCompactTimestamp(n.seconds)}](${n.url}) ${n.label}`);
+    }
+    lines.push('', '**주요 타임라인**', '');
+    for (const n of geminiNotes) {
+      lines.push(`- [${formatCompactTimestamp(n.seconds)}](${n.url}) ${n.label}`);
+    }
+  } else if (segments.length >= 3) {
     for (const segment of segments) {
       lines.push(`- [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
     }
@@ -387,6 +419,119 @@ async function callGeminiWithFallback(prompt) {
     }
   }
   throw new Error(`Gemini fallback exhausted: ${errors.join(' | ')}`);
+}
+
+async function recoverMissingTranscriptsWithGemini(items) {
+  if (!geminiVideoRecovery || geminiVideoRecoveryLimit === 0) return;
+
+  const targets = items.filter(v => v.videoId && (v.transcriptSegments || []).length < 3);
+  if (targets.length === 0) return;
+
+  console.log(`Gemini transcript recovery: ${Math.min(targets.length, geminiVideoRecoveryLimit)} video(s) lack captions; analyzing via Gemini video input.`);
+  let recovered = 0;
+  let quotaExhausted = false;
+
+  for (const video of targets) {
+    if (recovered >= geminiVideoRecoveryLimit || quotaExhausted) break;
+    try {
+      const result = await callGeminiVideoSummaryWithFallback(video);
+      if (result?.summary && result.summary.length > 80) {
+        video.geminiVideoSummary = result.summary;
+        video.geminiTimestampNotes = result.notes;
+        recovered++;
+        console.log(`  ✅ Recovered ${video.videoId} via Gemini (${result.summary.length} chars, ${result.notes.length} notes)`);
+      }
+    } catch (err) {
+      if (isQuotaError(err)) {
+        quotaExhausted = true;
+        console.warn(`  Gemini recovery paused after quota limit: ${String(err.message).slice(0, 160)}`);
+      } else {
+        console.warn(`  Gemini recovery skipped for ${video.videoId}: ${String(err.message).slice(0, 160)}`);
+      }
+    }
+  }
+  console.log(`Gemini transcript recovery: ${recovered} recovered.`);
+}
+
+async function callGeminiVideoSummaryWithFallback(video) {
+  const models = [...new Set([...geminiFallbackModels])];
+  const errors = [];
+  for (const model of models) {
+    try {
+      return await callGeminiVideoSummary(model, video);
+    } catch (err) {
+      errors.push(`${model}: ${err.message}`);
+      if (isQuotaError(err)) throw err;
+      if (!isMissingModelError(err) && !isVideoInputModelError(err)) throw err;
+    }
+  }
+  throw new Error(`No Gemini model accepted video input. ${errors.join(' | ')}`);
+}
+
+async function callGeminiVideoSummary(model, video) {
+  const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+  const dur = Number.isFinite(video.duration) ? `${video.duration} seconds` : 'unknown';
+  const text = `Watch this Korean YouTube video and extract its content for a news digest. Return JSON only, no markdown:
+{
+  "summary": "8-15 sentence Korean summary of what the speaker actually says: specific names, companies, numbers, claims. No teasers, no generic advice.",
+  "notes": [ { "time": "MM:SS", "seconds": 0, "label": "concrete Korean point at this moment" } ]
+}
+Requirements:
+- 5 to 8 notes; every seconds value within video duration (${dur}).
+- Title: ${video.title || ''}`;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(geminiRequestTimeoutMs),
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ file_data: { file_uri: videoUrl } }, { text }] }],
+      generationConfig: { temperature: 0.2, topP: 0.8 }
+    })
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    const err = new Error(`Gemini video API failed (${res.status}): ${body.slice(0, 600)}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  const json = await res.json();
+  const parts = json?.candidates?.[0]?.content?.parts || [];
+  const out = parts.map(p => p?.text || '').join('\n').trim();
+  const obj = extractJsonObject(out);
+  return { summary: String(obj.summary || '').trim(), notes: normalizeTimestampNotes(obj.notes || [], video.videoId, video.duration) };
+}
+
+function extractJsonObject(text) {
+  if (!text) return {};
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return {};
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return {};
+  }
+}
+
+function normalizeTimestampNotes(notes, videoId, duration) {
+  if (!Array.isArray(notes)) return [];
+  const max = Number.isFinite(duration) && duration > 0 ? duration : Infinity;
+  return notes
+    .map(n => {
+      const seconds = Math.max(0, Math.floor(Number(n.seconds)));
+      const label = cleanSentence(String(n.label || ''));
+      if (!Number.isFinite(seconds) || seconds > max || !label) return null;
+      return { seconds, label, url: `https://www.youtube.com/watch?v=${videoId}&t=${seconds}` };
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function isVideoInputModelError(err) {
+  return /file[_ ]?data|video|youtube|unsupported|not supported/i.test(err?.body || err?.message || '');
 }
 
 async function callClaude(model, prompt) {
