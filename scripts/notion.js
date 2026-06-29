@@ -7,7 +7,9 @@
  */
 
 const NOTION_API = 'https://api.notion.com/v1';
-const NOTION_VERSION = '2022-06-28';
+// 2026-03-11 introduced the `position` object (insert at start/end/after_block),
+// which we use to keep the newest digest on top. Override with NOTION_VERSION.
+const NOTION_VERSION = process.env.NOTION_VERSION || '2026-03-11';
 
 export function notionHeaders(token) {
   return {
