@@ -129,7 +129,7 @@ export async function createDigestPage({ parentPageId, title, blocks, position, 
   if (!res.ok && position) {
     const errText = await res.text();
     if (res.status === 400 && /position/i.test(errText)) {
-      console.log('   ⚠️  position param rejected; creating without ordering.');
+      console.log(`   ⚠️  position param rejected (${errText.slice(0, 200)}); creating without ordering.`);
       delete body.position;
       res = await notionFetch(`${NOTION_API}/pages`, {
         method: 'POST', headers: notionHeaders(token), body: JSON.stringify(body)
