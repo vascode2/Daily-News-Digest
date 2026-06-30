@@ -187,7 +187,7 @@ function buildFallbackVideoMarkdown(video, err = null) {
   const channelName = video.channelName || video.channel || '채널';
 
   const overview = video.geminiVideoSummary
-    ? cleanSentence(video.geminiVideoSummary).slice(0, 600)
+    ? trimToSentence(video.geminiVideoSummary, 600)
     : description;
 
   const lines = [
@@ -203,40 +203,37 @@ function buildFallbackVideoMarkdown(video, err = null) {
       ? `${channelName} 영상을 분석한 내용 요약입니다.`
       : `${channelName} 영상의 자동 요약 응답이 제한되어 제목·설명만으로 보수적으로 정리한 사례입니다. 영상 본문에서 직접 확인이 권장됩니다.`,
     '',
-    '1. **영상 개요**',
+    '**영상 개요**',
     '',
     `- ${overview}`,
     `- 채널: ${channelName}`,
-    '',
-    '2. **확인 권장 구간**',
     ''
   ];
 
   if (geminiNotes.length >= 3) {
-    for (const n of geminiNotes) {
-      lines.push(`- [${formatCompactTimestamp(n.seconds)}](${n.url}) ${n.label}`);
-    }
-    lines.push('', '**주요 타임라인**', '');
+    lines.push('**주요 타임라인**', '');
     for (const n of geminiNotes) {
       lines.push(`- [${formatCompactTimestamp(n.seconds)}](${n.url}) ${n.label}`);
     }
   } else if (segments.length >= 3) {
+    lines.push('**주요 타임라인**', '');
     for (const segment of segments) {
       lines.push(`- [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
     }
-    lines.push('', '**주요 타임라인**', '');
-    for (const segment of segments) {
-      lines.push(`- [${formatCompactTimestamp(segment.seconds)}](${videoUrl}&t=${segment.seconds}) ${segment.text}`);
-    }
-  } else {
-    lines.push('- 자막 조각이 충분하지 않아 별도 타임라인은 제공되지 않습니다. 영상에서 직접 확인을 권장합니다.');
   }
 
-  if (err) {
-    const reason = String(err.message || '').replace(/\s+/g, ' ').slice(0, 220);
-    lines.push('', `> ⚠️ Claude 응답이 제한되어 자동 요약이 제한된 상태입니다. (사유: ${reason})`);
-  } else {
-    lines.push('', '> ⚠️ Claude 응답이 제한되어 자동 요약이 제한된 상태입니다.');
+  // When Gemini recovery already produced a substantive summary + timeline, the
+  // output above is genuine content (just assembled without a final LLM pass),
+  // so suppress the alarming "자동 요약이 제한된 상태" warning. Only show it when
+  // we truly fell back to title/description with no recovered transcript.
+  const hasRecoveredContent = Boolean(video.geminiVideoSummary) && (geminiNotes.length >= 3 || segments.length >= 3);
+  if (!hasRecoveredContent) {
+    if (err) {
+      const reason = String(err.message || '').replace(/\s+/g, ' ').slice(0, 220);
+      lines.push('', `> ⚠️ 자동 요약 응답이 제한되어 제목·설명 기준으로만 정리했습니다. (사유: ${reason})`);
+    } else {
+      lines.push('', '> ⚠️ 자동 요약 응답이 제한되어 제목·설명 기준으로만 정리했습니다.');
+    }
   }
 
   return lines.join('\n').trim();
@@ -634,6 +631,33 @@ function cleanSentence(text) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 220);
+}
+
+// Clean markdown/whitespace from text and trim to maxLen, cutting at the last
+// sentence boundary so the overview never ends mid-word (e.g. "작용하기 어렵습니").
+function trimToSentence(text, maxLen = 600) {
+  const cleaned = String(text || '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[#>*_`\[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned.length <= maxLen) return cleaned;
+  const window = cleaned.slice(0, maxLen);
+  const lastBoundary = Math.max(
+    window.lastIndexOf('. '),
+    window.lastIndexOf('? '),
+    window.lastIndexOf('! '),
+    window.lastIndexOf('다. '),
+    window.lastIndexOf('다.'),
+    window.lastIndexOf('。'),
+    window.lastIndexOf('！'),
+    window.lastIndexOf('？')
+  );
+  if (lastBoundary >= maxLen * 0.5) {
+    return cleaned.slice(0, lastBoundary + 1).trim();
+  }
+  const lastSpace = window.lastIndexOf(' ');
+  return `${(lastSpace >= maxLen * 0.5 ? window.slice(0, lastSpace) : window).trim()}…`;
 }
 
 function segmentStartSeconds(value) {
