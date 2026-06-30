@@ -304,8 +304,10 @@ function normalizeVideoMarkdown(markdown, video) {
       keptVideoH2 = true;
       return true;
     }
-    if (/^##\s+\[[^\]]+\]\([^)]+\)\s*$/.test(line)) return false;
-    return true;
+    // Only one H2 (the linked video title) is valid per video block. Drop any
+    // other H2 the model emits — duplicate titles, whether linked
+    // (## [t](url)) or bare (## t), that sometimes repeat the title heading.
+    return false;
   });
   cleaned = filtered.join('\n');
 
