@@ -57,11 +57,10 @@ Manual workflows are also available:
 
    | Name | Value |
    | --- | --- |
-   | `GEMINI_API_KEY` | Google Gemini API key (used by the default summarizer) |
+   | `GEMINI_API_KEY` | Google Gemini API key (used by the summarizer) |
    | `NOTION_TOKEN` | Notion integration token |
    | `NOTION_PAGE_ID` | Parent Notion page ID for News Digest |
    | `YOUTUBE_COOKIES_B64` | Base64 YouTube cookies for yt-dlp |
-   | `CLAUDE_CODE_OAUTH_TOKEN` *(optional)* | Only if you run the manual Claude summarizer (`npm run summarize`) |
 
    Do not commit real token values or private page IDs to the repository.
 
@@ -71,9 +70,7 @@ Manual workflows are also available:
    | --- | --- |
    | `GEMINI_MODEL` | `gemini-3.5-flash` preferred; falls back to `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash` if unavailable |
 
-   Override the chain via `GEMINI_FALLBACK_MODELS` (comma-separated). The default GitHub Actions summarizer (`npm run summarize:gemini`) needs only `GEMINI_API_KEY`.
-
-   A Claude summarizer is kept as `npm run summarize` for manual/ad-hoc use; it needs `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` and has its own Gemini fallback.
+   Override the chain via `GEMINI_FALLBACK_MODELS` (comma-separated). The summarizer (`npm run summarize`) needs only `GEMINI_API_KEY`.
 
 3. In Notion, share the News Digest page with the same integration used by `NOTION_TOKEN`.
 
@@ -82,12 +79,11 @@ Manual workflows are also available:
 ## Local Commands
 
 ```bash
-npm run collect          # yesterday's videos
-npm run collect:week     # last 7 days
-npm run summarize:gemini # default: generate tmp/summaries-*.md with Gemini
-npm run summarize        # alternative: generate with the Claude summarizer
-npm run review           # validate latest tmp/summaries-*.md
-npm run publish          # write output/ and publish to Notion if env vars are set
+npm run collect        # yesterday's videos
+npm run collect:week   # last 7 days
+npm run summarize      # generate tmp/summaries-*.md with Gemini
+npm run review         # validate latest tmp/summaries-*.md
+npm run publish        # write output/ and publish to Notion if env vars are set
 ```
 
 Single-channel mode ignores date and keyword filters:
@@ -110,7 +106,6 @@ In PowerShell, quote the handle: `--channel '@3protv'`.
 │   └── keywords.txt
 ├── scripts/
 │   ├── collect.js
-│   ├── summarize-claude.js
 │   ├── summarize-gemini.js
 │   ├── review.js
 │   └── publish.js
