@@ -717,7 +717,7 @@
 
       <div class="arch-wrapper">
         <svg class="arch-svg" viewBox="0 0 1100 460" xmlns="http://www.w3.org/2000/svg" aria-labelledby="arch-title" role="img">
-          <title id="arch-title">System architecture diagram showing data flow from YouTube channels through GitHub Actions cron, yt-dlp, Claude, validator, to Notion and GitHub repo destinations</title>
+          <title id="arch-title">System architecture diagram showing data flow from YouTube channels through GitHub Actions cron, yt-dlp, Gemini, validator, to Notion and GitHub repo destinations</title>
 
           <!-- Sources column (left) -->
           <g aria-label="Source channels">
@@ -766,10 +766,10 @@
             <text x="340" y="258" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">yt-dlp</text>
             <text x="340" y="276" text-anchor="middle" fill="var(--text-secondary)" font-size="11">collect videos</text>
 
-            <!-- Claude -->
+            <!-- Gemini -->
             <rect x="240" y="320" width="200" height="80" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="2"/>
             <text x="340" y="348" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="700" letter-spacing="2">STEP 2</text>
-            <text x="340" y="368" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Claude Haiku</text>
+            <text x="340" y="368" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Gemini</text>
             <text x="340" y="386" text-anchor="middle" fill="var(--text-secondary)" font-size="11">summarize</text>
 
             <!-- Validator -->
@@ -863,7 +863,7 @@
                   <li>GitHub's cron scheduler fires at 11:00 UTC</li>
                   <li>A fresh Ubuntu virtual machine spins up</li>
                   <li>Latest code is checked out from main branch</li>
-                  <li>Node.js, yt-dlp, Claude CLI install</li>
+                  <li>Node.js, yt-dlp install</li>
                 </ul>
               </div>
               <div class="step-detail-card">
@@ -929,7 +929,7 @@
             <span class="step-badge">03</span>
             <div class="step-meta">
               <h3>Summarize with AI</h3>
-              <p>Claude reads each video and writes a structured summary</p>
+              <p>Gemini reads each video and writes a structured summary</p>
             </div>
             <span class="step-time">~1.5 min</span>
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -939,7 +939,7 @@
               <div class="step-detail-card">
                 <h4>What happens</h4>
                 <ul>
-                  <li>Claude CLI starts in headless mode</li>
+                  <li>summarize-gemini.js sends each video to the Gemini API</li>
                   <li>Reads the raw JSON file from step 2</li>
                   <li>For each video: writes Key Summary + Timeline + Insight</li>
                   <li>Groups summaries under red channel headers</li>
@@ -949,16 +949,16 @@
               <div class="step-detail-card">
                 <h4>Tools used</h4>
                 <div class="step-tools">
-                  <span class="tool-tag">Anthropic Messages API</span>
-                  <span class="tool-tag">--print mode</span>
-                  <span class="tool-tag">Claude Sonnet/Haiku fallback</span>
-                  <span class="tool-tag">OAuth token</span>
+                  <span class="tool-tag">Gemini API</span>
+                  <span class="tool-tag">generateContent</span>
+                  <span class="tool-tag">gemini-3.5-flash + fallback</span>
+                  <span class="tool-tag">GEMINI_API_KEY</span>
                 </div>
-                <h4 style="margin-top:20px">Why Haiku?</h4>
+                <h4 style="margin-top:20px">Why gemini-3.5-flash?</h4>
                 <ul>
-                  <li>2-3× faster than Sonnet</li>
-                  <li>Uses less of your subscription quota</li>
-                  <li>Quality is great for short summaries</li>
+                  <li>Fast and cost-effective for daily runs</li>
+                  <li>Handles Korean summaries well</li>
+                  <li>Falls back to 2.5-flash / 2.0-flash if unavailable</li>
                 </ul>
               </div>
             </div>
@@ -1160,8 +1160,8 @@ In the demo they handle the same stale-lock edge case in 80 lines of TS vs. one 
           <div class="failure-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           </div>
-          <h3>Claude rate limit hit</h3>
-          <p>If you used Claude heavily today, the workflow shares your 5-hour rolling quota. The pipeline returns "You've hit your limit · resets at X PM UTC".</p>
+          <h3>Gemini rate limit hit</h3>
+          <p>If the daily run exceeds Gemini's per-minute free-tier quota, the API returns 429; the pipeline retries with backoff and falls back to a smaller Gemini model before giving up.</p>
           <p class="recovery"><strong>Recovery:</strong> Auto-retry next morning with fresh quota. Or wait for reset and trigger manually.</p>
         </article>
 
@@ -1197,7 +1197,7 @@ In the demo they handle the same stale-lock edge case in 80 lines of TS vs. one 
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
           </div>
           <h3>Format spec drift</h3>
-          <p>You edited config/format.md but Claude wrote summaries in old format. Validation flags it as a warning.</p>
+          <p>You edited config/format.md but Gemini wrote summaries in old format. Validation flags it as a warning.</p>
           <p class="recovery"><strong>Recovery:</strong> Pipeline still publishes — warnings don't block. Future runs follow new format automatically.</p>
         </article>
       </div>

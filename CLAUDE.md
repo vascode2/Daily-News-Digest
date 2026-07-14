@@ -1,17 +1,17 @@
 # Daily News Digest — Project Guide
 
 ## Purpose
-Automatically collect, summarize, and publish Korean general-news and economy-leaning YouTube summaries every morning. Summarization runs through the Anthropic Claude API from `scripts/summarize-claude.js` (default model: `claude-opus-4-7`, fallback `claude-sonnet-4-6` → `claude-haiku-4-5`).
+Automatically collect, summarize, and publish Korean general-news and economy-leaning YouTube summaries every morning. Summarization runs through the Google Gemini API from `scripts/summarize-gemini.js` (default model: `gemini-3.5-flash`, fallback `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash`). A Claude summarizer (`scripts/summarize-claude.js`, `npm run summarize`) remains available for manual/ad-hoc use.
 
 ## Tech Stack
 - Runtime: Node.js v22+
 - YouTube data: yt-dlp (CLI tool)
-- AI summarization: Anthropic Claude API via `scripts/summarize-claude.js` (legacy `scripts/summarize-gemini.js` retained for ad-hoc use)
+- AI summarization: Google Gemini API via `scripts/summarize-gemini.js` (Claude summarizer `scripts/summarize-claude.js` retained for manual/ad-hoc use)
 - Output: Markdown files + optional Notion API
 
 ## Workflow Overview
 1. **Collect** (Node script) — yt-dlp fetches yesterday's videos + transcripts
-2. **Summarize** (Node script + Claude) — reads raw JSON, writes summaries following `config/format.md`
+2. **Summarize** (Node script + Gemini) — reads raw JSON, writes summaries following `config/format.md`
 3. **Review** (Node script) — Validates structure and auto-fixes formatting
 4. **Publish** (Node script) — Saves to `output/YYYY-MM-DD.md` and optionally Notion
 
@@ -35,9 +35,9 @@ Creates `tmp/raw-{key}.json` where key is either `YYYY-MM-DD` or `YYYY-MM-DD_to_
 
 ### Step 2: Summarize
 ```bash
-npm run summarize
+npm run summarize:gemini
 ```
-Reads the latest `tmp/raw-{key}.json`, `config/format.md`, and `agents/summarizer.md`, then writes `tmp/summaries-{key}.md` using Claude (Opus 4.7 by default). To force the legacy Gemini path, run `npm run summarize:gemini` instead.
+Reads the latest `tmp/raw-{key}.json`, `config/format.md`, and `agents/summarizer.md`, then writes `tmp/summaries-{key}.md` using Gemini (`gemini-3.5-flash` by default). To use the Claude summarizer instead, run `npm run summarize`.
 
 ### Step 3: Review
 ```bash
@@ -65,20 +65,17 @@ Tell the user the output file path, channel/video counts, and any errors.
 
 ## Environment Variables
 ```
-ANTHROPIC_API_KEY=sk-ant-...                   # Required for npm run summarize (or CLAUDE_CODE_OAUTH_TOKEN)
-CLAUDE_MODEL=claude-opus-4-7                   # Optional preferred model; falls back to claude-sonnet-4-6 → claude-haiku-4-5
-CLAUDE_FALLBACK_MODELS=...                     # Optional comma-separated override of the Claude fallback chain
-CLAUDE_INTER_REQUEST_DELAY_MS=2000             # Optional: delay between videos to stay under per-minute token limits
-CLAUDE_TRANSIENT_MAX_RETRIES=2                 # Optional: per-model retries on 429/529/5xx with exponential backoff
-CLAUDE_TRANSIENT_BACKOFF_MS=5000               # Optional: base backoff (doubles each retry)
-GEMINI_API_KEY=your_gemini_api_key             # Optional: enables Gemini fallback after all Claude models fail
-GEMINI_FALLBACK_MODELS=gemini-3-fast,gemini-2.5-flash,gemini-2.5-flash-lite  # Optional override for Gemini fallback chain
+GEMINI_API_KEY=your_gemini_api_key             # Required for npm run summarize:gemini (the default summarizer)
+GEMINI_MODEL=gemini-3.5-flash                  # Optional preferred model; falls back to gemini-2.5-flash → gemini-2.5-flash-lite → gemini-2.0-flash
+GEMINI_FALLBACK_MODELS=gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash  # Optional override for the Gemini fallback chain
+GEMINI_YOUTUBE_FALLBACK=true                   # Optional: Gemini path can fall back to YouTube URL input when transcripts are missing
 NOTION_TOKEN=secret_...                        # Optional: enables Notion publishing
 NOTION_PAGE_ID=your_32_character_notion_page_id  # News Digest parent page
-GEMINI_MODEL=gemini-2.5-flash                  # Optional; only used by the legacy npm run summarize:gemini script
-GEMINI_YOUTUBE_FALLBACK=true                   # Optional: legacy Gemini path can fall back to YouTube URL input
+ANTHROPIC_API_KEY=sk-ant-...                   # Optional: only for the manual Claude summarizer (npm run summarize); or use CLAUDE_CODE_OAUTH_TOKEN
+CLAUDE_MODEL=claude-sonnet-4-6                 # Optional: preferred model for the manual Claude summarizer
+CLAUDE_FALLBACK_MODELS=...                     # Optional: comma-separated override of the Claude fallback chain
 ```
-The active summarizer is Anthropic Claude (Opus 4.7 → Sonnet 4.6 → Haiku 4.5). If all Claude attempts fail (rate limit, overload, etc.) and `GEMINI_API_KEY` is set, the script automatically falls back to Gemini (default chain: `gemini-3-fast` → `gemini-2.5-flash` → `gemini-2.5-flash-lite`). Gemini is only consumed when Claude is unavailable, so normal daily runs do **not** count against Gemini free-tier quota used by other projects.
+The active summarizer is Google Gemini (`gemini-3.5-flash` → `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash`). The GitHub Actions workflows run `npm run summarize:gemini` and need only `GEMINI_API_KEY`. A Claude summarizer (`scripts/summarize-claude.js`, `npm run summarize`) is kept for manual runs; it uses `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` and has its own Gemini fallback.
 
 ## Error Handling
 - yt-dlp fails for a channel → log error, skip channel, continue

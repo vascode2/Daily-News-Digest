@@ -223,7 +223,7 @@ Assumptions made from README:
       end
       subgraph runtime["GitHub Actions runner"]
         C1[collect.js<br/>yt-dlp]
-        C2[summarize<br/>Claude]
+        C2[summarize<br/>Gemini]
         C3[review.js<br/>format check]
         C4[publish.js<br/>Notion + markdown]
       end
@@ -251,7 +251,7 @@ Assumptions made from README:
   function App() {
     const stages = [
       ['01', 'collect', 'yt-dlp', 'Checks each configured YouTube channel and pulls metadata, descriptions, and subtitle timing.'],
-      ['02', 'summarize', 'Claude', 'Reads the raw JSON and writes a Korean morning briefing in the required format.'],
+      ['02', 'summarize', 'Gemini', 'Reads the raw JSON and writes a Korean morning briefing in the required format.'],
       ['03', 'review', 'review.js', 'Validates structure, Korean language, examples, and timestamp rules before publishing.'],
       ['04', 'publish', 'Notion API', 'Creates a dated child page in Notion and saves a markdown copy to output/.'],
       ['05', 'archive', 'git commit', 'GitHub Actions commits the generated archive back to the repository for history.'],
@@ -277,7 +277,7 @@ Assumptions made from README:
               <div className="eyebrow">// daily-news-digest</div>
               <h1>A morning briefing that turns Korean news YouTube into one skimmable Notion page.</h1>
               <p className="lede">
-                Every day at 7 AM New York time, a GitHub Actions workflow checks the configured general-news and economy channels, collects transcripts, and asks Claude (Opus 4.7) to write a Korean digest. It also follows selected 오건영 appearances without pulling in unrelated videos from those channels.
+                Every day at 7 AM New York time, a GitHub Actions workflow checks the configured general-news and economy channels, collects transcripts, and asks Google Gemini to write a Korean digest. It also follows selected 오건영 appearances without pulling in unrelated videos from those channels.
               </p>
             </div>
             <div className="run-panel">
@@ -334,7 +334,7 @@ Assumptions made from README:
             <div className="section-head">
               <div className="section-tag">02 / architecture</div>
               <h2>How the morning pipeline runs</h2>
-              <p className="dek">A cron job (a scheduled task) wakes GitHub Actions at the right local time. The runner collects raw YouTube data, Claude summarizes it, a review script checks the shape, and publishing sends the result to Notion plus the repo archive.</p>
+              <p className="dek">A cron job (a scheduled task) wakes GitHub Actions at the right local time. The runner collects raw YouTube data, Gemini summarizes it, a review script checks the shape, and publishing sends the result to Notion plus the repo archive.</p>
             </div>
             <div className="arch-card">
               <div className="arch-head"><span className="arch-title">pipeline.flow</span><span className="arch-meta">America/New_York gate · ubuntu-latest</span></div>
@@ -362,7 +362,7 @@ Assumptions made from README:
                   <tr><td className="key">config/channels.txt</td><td className="val">Main channel list, including per-channel filters like <code>@3protv :: 오건영</code>.</td></tr>
                   <tr><td className="key">config/keywords.txt</td><td className="val">Optional global keyword filter; normally left commented out.</td></tr>
                   <tr><td className="key">config/format.md</td><td className="val">Required structure for channel headings, insight, summary, and timestamps.</td></tr>
-                  <tr><td className="key">ANTHROPIC_API_KEY</td><td className="val">Anthropic API key (or CLAUDE_CODE_OAUTH_TOKEN) used by Claude during GitHub Actions.</td></tr>
+                  <tr><td className="key">GEMINI_API_KEY</td><td className="val">Google Gemini API key used by the summarizer during GitHub Actions.</td></tr>
                   <tr><td className="key">NOTION_TOKEN</td><td className="val">Notion integration token used to create the child digest page.</td></tr>
                   <tr><td className="key">YOUTUBE_COOKIES_B64</td><td className="val">Base64 browser cookies so yt-dlp can fetch YouTube metadata and captions reliably.</td></tr>
                   <tr><td className="key">NOTION_PAGE_ID</td><td className="val">Private parent page ID stored as a secret, not shown publicly.</td></tr>
@@ -415,7 +415,7 @@ Assumptions made from README:
             </div>
           </section>
         </div>
-        <footer><div className="wrap">https://github.com/vascode2/Daily-News-Digest · license not specified · built with GitHub Actions, yt-dlp, Claude, Notion API</div></footer>
+        <footer><div className="wrap">https://github.com/vascode2/Daily-News-Digest · license not specified · built with GitHub Actions, yt-dlp, Gemini, Notion API</div></footer>
       </main>
     );
   }

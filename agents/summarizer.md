@@ -9,7 +9,7 @@ When triggered by "어제 거 요약해 줘" or similar, `scripts/summarize-gemi
 - `config/keywords.txt` — optional keyword filter (already applied at collect stage)
 
 ## Output
-- `tmp/summaries-YYYY-MM-DD.md` — markdown file Claude writes directly
+- `tmp/summaries-YYYY-MM-DD.md` — markdown file Gemini writes directly
 
 ## Audience & Tone
 The user wants a concise Korean morning briefing for general news with a light economy/markets tilt.
