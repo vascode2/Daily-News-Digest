@@ -1,6 +1,19 @@
+# Secrets & credentials
 .env
-tmp/
-node_modules/
-.claude/
+.env.*
+!.env.example
 cookies.txt
 *.cookies.txt
+
+# Dependencies (reinstall via npm install)
+node_modules/
+
+# Regenerable runtime cache
+tmp/
+
+# Local agent/tool state
+.claude/
+
+# OS cruft
+.DS_Store
+Thumbs.db
