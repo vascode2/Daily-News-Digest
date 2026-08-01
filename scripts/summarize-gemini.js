@@ -85,7 +85,7 @@ Output requirements:
 - Use concrete names/companies/stocks/sectors/numbers/years from the transcript, description, or geminiTimestampNotes.
 - If transcriptSegments has 3+ entries, include at least 3 inline timestamp links in 핵심 요약 using exact segment start times: [HH:MM](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS), and include a **주요 타임라인** section with 3-6 linked entries.
 - If transcriptSegments is empty but geminiTimestampNotes has 3+ entries, use those notes for at least 3 inline timestamp links and include a **주요 타임라인** section with 3-6 linked entries.
-- If both transcriptSegments and geminiTimestampNotes are empty, summarize from the available title and description only. Be conservative, clearly say when details are not available, do not invent timestamps, and omit 주요 타임라인.
+- If both transcriptSegments and geminiTimestampNotes are empty, summarize from the available title and description only. Be conservative, clearly say once that detail is limited, do not invent timestamps, omit 주요 타임라인, and do not repeat boilerplate such as "자막 미제공", "상세 자막 부재", or "확인 불가" in multiple bullets.
 - Use exactly one inline timestamp per bullet. Two timestamps beside each other are not a range; avoid adjacent timestamp links like [03:07](...) [05:40](...). Put extra moments in 주요 타임라인 instead.
 - No blockquote > prefix. No generic takeaway or 실무 적용 sentences. Stay faithful to what the speaker actually says.
 
@@ -237,7 +237,38 @@ function normalizeVideoMarkdown(markdown, video) {
     cleaned = `## [${fallbackTitle}](https://www.youtube.com/watch?v=${video.videoId})\n\n${cleaned}`;
   }
 
+  cleaned = collapseTranscriptGapBoilerplate(cleaned, video);
   return cleaned;
+}
+
+function collapseTranscriptGapBoilerplate(markdown, video) {
+  const hasTranscript = (video.transcriptSegments || []).length >= 3;
+  const hasGeminiNotes = (video.geminiTimestampNotes || []).length >= 3;
+  if (hasTranscript || hasGeminiNotes) return markdown;
+
+  let keptDisclaimer = false;
+  const lines = markdown
+    .split('\n')
+    .filter(line => {
+      if (!isTranscriptGapBoilerplate(line)) return true;
+      if (!keptDisclaimer && !line.trim().startsWith('-')) {
+        keptDisclaimer = true;
+        return true;
+      }
+      return false;
+    });
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function isTranscriptGapBoilerplate(line) {
+  const normalized = String(line || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return false;
+  if (/\]\(https:\/\/www\.youtube\.com\/watch\?v=/.test(normalized)) return false;
+
+  const mentionsTranscriptGap = /(자막|스크립트|타임라인).*(미제공|부재|없|제한적|확인 (?:불가|어렵)|파악하기 어렵)|(?:미제공|부재|없|제한적).*(자막|스크립트|타임라인)/.test(normalized);
+  const genericLimitation = /(상세한?|구체적인?) .*(확인 (?:불가|어렵)|파악하기 어렵|제공되지 않)/.test(normalized);
+  return mentionsTranscriptGap || genericLimitation;
 }
 
 function assembleDigest(digestTitle, entries) {
