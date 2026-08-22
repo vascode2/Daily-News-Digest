@@ -1,7 +1,7 @@
 # Daily News Digest — Project Guide
 
 ## Purpose
-Automatically collect, summarize, and publish Korean general-news and economy-leaning YouTube summaries every morning. Summarization runs through the Google Gemini API from `scripts/summarize-gemini.js` (default model: `gemini-3.5-flash`, fallback `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash`).
+Automatically collect, summarize, and publish Korean general-news and economy-leaning YouTube summaries every morning. Summarization runs through the Google Gemini API from `scripts/summarize-gemini.js` (default model: `gemini-3.5-flash`, fallback `gemini-3.7-flash` → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash`).
 
 ## Tech Stack
 - Runtime: Node.js v22+
@@ -66,13 +66,13 @@ Tell the user the output file path, channel/video counts, and any errors.
 ## Environment Variables
 ```
 GEMINI_API_KEY=your_gemini_api_key             # Required for npm run summarize (the summarizer)
-GEMINI_MODEL=gemini-3.5-flash                  # Optional preferred model; falls back to gemini-2.5-flash → gemini-2.5-flash-lite → gemini-2.0-flash
-GEMINI_FALLBACK_MODELS=gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash  # Optional override for the Gemini fallback chain
+GEMINI_MODEL=gemini-3.5-flash                  # Optional preferred model; fallback chain below
+GEMINI_FALLBACK_MODELS=gemini-3.7-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash  # Optional override for the Gemini fallback chain
 GEMINI_YOUTUBE_FALLBACK=true                   # Optional: Gemini path can fall back to YouTube URL input when transcripts are missing
 NOTION_TOKEN=secret_...                        # Optional: enables Notion publishing
 NOTION_PAGE_ID=your_32_character_notion_page_id  # News Digest parent page
 ```
-The summarizer is Google Gemini (`gemini-3.5-flash` → `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash`). The GitHub Actions workflows run `npm run summarize` and need only `GEMINI_API_KEY`.
+The summarizer is Google Gemini (`gemini-3.5-flash` → `gemini-3.7-flash` → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash`). The GitHub Actions workflows run `npm run summarize` and need only `GEMINI_API_KEY`. All model IDs were verified against Google's `/v1beta/models` endpoint (Aug 2026).
 
 ## Error Handling
 - yt-dlp fails for a channel → log error, skip channel, continue
