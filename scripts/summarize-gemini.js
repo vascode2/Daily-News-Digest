@@ -25,7 +25,7 @@ const COPILOT_ENDPOINT = 'https://api.githubcopilot.com';
 function getCopilotConfig() {
   const token = process.env.COPILOT_API_TOKEN || process.env.GH_TOKEN;
   if (!token) return null;
-  const models = (process.env.COPILOT_MODEL || 'claude-sonnet-5.5,claude-haiku-5.5,gpt-4o-mini')
+  const models = (process.env.COPILOT_MODEL || 'claude-haiku-5.5,claude-sonnet-5.5,gpt-4o-mini')
     .split(',')
     .map(modelName => modelName.trim())
     .filter(Boolean);

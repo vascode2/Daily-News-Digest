@@ -69,7 +69,7 @@ Manual workflows are also available:
 
    | Name | Default |
    | --- | --- |
-   | `COPILOT_MODEL` | `claude-sonnet-5.5,claude-haiku-5.5,gpt-4o-mini` — Copilot chain tried in order before Gemini |
+   | `COPILOT_MODEL` | `claude-haiku-5.5,claude-sonnet-5.5,gpt-4o-mini` — Copilot chain tried in order before Gemini |
    | `GEMINI_MODEL` | `gemini-3.5-flash` preferred; falls back to `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash` if unavailable |
 
    Override the chain via `GEMINI_FALLBACK_MODELS` (comma-separated). Summarization uses the Copilot chain first when `COPILOT_API_TOKEN` is set, then Gemini (`npm run summarize` needs Copilot token or `GEMINI_API_KEY`).
