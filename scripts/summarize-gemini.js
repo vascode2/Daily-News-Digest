@@ -20,8 +20,92 @@ const fallbackModels = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.7-flash,
   .filter(Boolean);
 const modelsToTry = [...new Set([requestedModel, ...fallbackModels])];
 
-if (!apiKey) {
-  console.error('Missing GEMINI_API_KEY. Add it as a GitHub Actions secret or local environment variable.');
+const COPILOT_ENDPOINT = 'https://api.githubcopilot.com';
+
+function getCopilotConfig() {
+  const token = process.env.COPILOT_API_TOKEN || process.env.GH_TOKEN;
+  if (!token) return null;
+  const models = (process.env.COPILOT_MODEL || 'claude-sonnet-5.5,claude-haiku-5.5,gpt-4o-mini')
+    .split(',')
+    .map(modelName => modelName.trim())
+    .filter(Boolean);
+  return { token, models };
+}
+
+async function callCopilotText(model, prompt, token, requestTimeoutMs) {
+  const res = await fetch(`${COPILOT_ENDPOINT}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+      'Editor-Version': 'vscode/1.99.0',
+      'Editor-Plugin-Version': 'copilot-chat/1.250.0'
+    },
+    signal: AbortSignal.timeout(requestTimeoutMs),
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      top_p: 0.8,
+      max_tokens: 4096
+    })
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    const error = new Error(`Copilot ${model} failed (${res.status}): ${body.slice(0, 1200)}`);
+    error.status = res.status;
+    error.body = body;
+    error.retryAfter = parseFloat(res.headers.get('retry-after') || '0');
+    throw error;
+  }
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error(`Copilot response did not contain text: ${JSON.stringify(data).slice(0, 1000)}`);
+  return text;
+}
+
+/**
+ * Try the Copilot model chain first (if configured). Each model retries once
+ * on 429 with Retry-After; advances to the next model on 404/429/5xx or the
+ * unsupported-model 400 variant. Returns null if no provider configured or
+ * the whole chain fails.
+ */
+async function callCopilotTextWithFallback(prompt, timeoutMs) {
+  const copilot = getCopilotConfig();
+  if (!copilot) return null;
+
+  const errors = [];
+  for (const model of copilot.models) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const text = await callCopilotText(model, prompt, copilot.token, timeoutMs);
+        console.log(`Using Copilot model: ${model}`);
+        return text;
+      } catch (err) {
+        errors.push(`${model}: ${err.message}`);
+        if (err.status === 429 && attempt === 1) {
+          const waitMs = Math.min((err.retryAfter || 8) * 1000, 20000);
+          console.warn(`Copilot ${model} rate-limited (429); waiting ${waitMs}ms then retrying.`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+        if (err.status === 404 || err.status === 429 || err.status >= 500 ||
+            (err.status === 400 && /unsupported_api_for_model|model_not_supported/i.test(err.body || err.message))) {
+          console.warn(`Copilot model unavailable, trying next: ${model} (${err.message.slice(0, 160)})`);
+          break;
+        }
+        throw err;
+      }
+    }
+  }
+  console.warn(`Copilot chain failed: ${errors.join(' | ')}; falling back to Gemini.`);
+  return null;
+}
+
+const copilotConfigured = Boolean(getCopilotConfig());
+if (!apiKey && !copilotConfigured) {
+  console.error('Missing GEMINI_API_KEY or COPILOT_API_TOKEN. Add it as a GitHub Actions secret or local environment variable.');
   process.exit(1);
 }
 
@@ -41,7 +125,7 @@ const guidance = fs.readFileSync(path.join(ROOT, 'agents', 'summarizer.md'), 'ut
 const isChannel = key.startsWith('channel-');
 const title = isChannel ? `# Channel News Digest — ${key}` : `# News Digest — ${key}`;
 
-console.log(`Summarizing ${path.basename(rawFile)} with Gemini model preference: ${modelsToTry.join(' -> ')}`);
+console.log(`Summarizing ${path.basename(rawFile)} with model preference: ${copilotConfigured ? `copilot(${getCopilotConfig().models.join(' -> ')}) -> ` : ''}gemini(${modelsToTry.join(' -> ')})`);
 
 const enrichedRawItems = await enrichWithGeminiVideoTimestamps(rawItems);
 const videoSummaries = [];
@@ -321,6 +405,9 @@ async function callGeminiWithFallback(text) {
 }
 
 async function callGeminiTextWithFallback(text) {
+  const copilotText = await callCopilotTextWithFallback(text, geminiRequestTimeoutMs);
+  if (copilotText !== null) return copilotText;
+
   const errors = [];
 
   for (const model of modelsToTry) {

@@ -57,20 +57,22 @@ Manual workflows are also available:
 
    | Name | Value |
    | --- | --- |
-   | `GEMINI_API_KEY` | Google Gemini API key (used by the summarizer) |
+   | `GEMINI_API_KEY` | Google Gemini API key (summarizer fallback) |
+   | `COPILOT_API_TOKEN` | GitHub OAuth token (gh auth token output) or PAT tied to a Copilot subscription; primary summarization provider |
    | `NOTION_TOKEN` | Notion integration token |
    | `NOTION_PAGE_ID` | Parent Notion page ID for News Digest |
    | `YOUTUBE_COOKIES_B64` | Base64 YouTube cookies for yt-dlp |
 
    Do not commit real token values or private page IDs to the repository.
 
-   Optional repository variable:
+   Optional repository variables:
 
    | Name | Default |
    | --- | --- |
+   | `COPILOT_MODEL` | `claude-sonnet-5.5,claude-haiku-5.5,gpt-4o-mini` — Copilot chain tried in order before Gemini |
    | `GEMINI_MODEL` | `gemini-3.5-flash` preferred; falls back to `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash` if unavailable |
 
-   Override the chain via `GEMINI_FALLBACK_MODELS` (comma-separated). The summarizer (`npm run summarize`) needs only `GEMINI_API_KEY`.
+   Override the chain via `GEMINI_FALLBACK_MODELS` (comma-separated). Summarization uses the Copilot chain first when `COPILOT_API_TOKEN` is set, then Gemini (`npm run summarize` needs Copilot token or `GEMINI_API_KEY`).
 
 3. In Notion, share the News Digest page with the same integration used by `NOTION_TOKEN`.
 
