@@ -162,7 +162,9 @@ This is video ${index} of ${total}. Focus only on this video. Do not summarize o
 Output requirements:
 - Return markdown only. No code fence. No explanations.
 - Start with exactly one h2 video heading: ## [한국어 영상 제목](${videoUrl})
+- Immediately after the h2 heading, write EVERY video's first section as the literal line **한 줄 인사이트** (bold marker included, exact text, nothing else on that line), followed by one 💡-prefixed sentence insight. NEVER write the insight sentence directly under the h2 without the **한 줄 인사이트** line — the bold section label is mandatory for all videos, same as the **핵심 요약** label.
 - The first sentence after **핵심 요약** must NOT restate the video title. Start with the speaker, issue, claim, or data point instead.
+- Section labels **한 줄 인사이트** and **핵심 요약** are non-negotiable required literal lines in every video summary, even when detail is limited.
 - Do NOT include a digest title, channel heading, upload date, view count, duration, or transcript indicator.
 - Section order: **한 줄 인사이트** → **핵심 요약** → **주요 타임라인** when transcriptSegments or geminiTimestampNotes exist.
 - 핵심 요약 = intro 1-2 sentences + 3-5 numbered points with bold sub-headings. Each point has 1-3 sub-bullets.
@@ -320,6 +322,23 @@ function normalizeVideoMarkdown(markdown, video) {
     const fallbackTitle = String(video.title || '영상 요약').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim();
     cleaned = `## [${fallbackTitle}](https://www.youtube.com/watch?v=${video.videoId})\n\n${cleaned}`;
   }
+
+  // Repair: if the insight sentence appears directly under the h2 heading
+  // without the required **한 줄 인사이트** label line, insert the label
+  // before it (review.js treats the bare-sentence case as a missing section).
+  const repairLines = cleaned.split('\n');
+  for (let i = 0; i < repairLines.length; i++) {
+    if (/^##\s+/.test(repairLines[i]) && repairLines[i].includes(`watch?v=${video.videoId}`)) {
+      let j = i + 1;
+      while (j < repairLines.length && !repairLines[j].trim()) j++;
+      const line = repairLines[j];
+      if (line && line.trim().startsWith('💡') && !repairLines.slice(i + 1, j).some(l => l.includes('한 줄 인사이트'))) {
+        repairLines.splice(j, 0, '**한 줄 인사이트**', '');
+      }
+      break;
+    }
+  }
+  cleaned = repairLines.join('\n');
 
   cleaned = collapseTranscriptGapBoilerplate(cleaned, video);
   return cleaned;
